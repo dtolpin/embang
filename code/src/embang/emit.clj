@@ -1,5 +1,4 @@
 (ns embang.emit
-  (:use [embang.xlat :only [program alambda]])
   (:use [embang.trap :only [*gensym*
                             shading-primitive-procedures
                             cps-of-expression result-cont 
@@ -55,33 +54,6 @@
     `(def ~(with-meta name {:doc docstring})
        (query ~@source))))
 
-;; The original Scheme-like syntax is now deprecated, but
-;; supported for compatibility with older programs.  Programs
-;; written in the legacy syntax are defined using `anglican' and
-;; bound to a name using `defanglican'.
-
-(defmacro ^:deprecated anglican 
-  "macro for embedding anglican programs"
-  [& args]
-  (let [[value source]
-        (if (symbol? (first args)) ; named argument?
-          [(first args) (rest args)]
-          ['$value args])]
-    (overriding-higher-order-functions
-      (shading-primitive-procedures [value]
-        `(~'fn ~(*gensym* "anglican") [~value ~'$state]
-           ~(cps-of-expression (program source) result-cont))))))
-
-(defmacro ^:deprecated defanglican
-  "binds variable to anglican program"
-  [name & args]
-  (let [[docstring source]
-        (if (string? (first args))
-          [(first args) (rest args)]
-          [(format "anglican program '%s'" name) args])]
-    `(def ~(with-meta name {:doc docstring})
-       (anglican ~@source))))
-
 ;;; Auxiliary macros
 
 ;; When a function is defined outside an Anglican program, it
@@ -108,33 +80,6 @@
               :arglists `'([~'$cont ~'$state
                             ~@(first source)])})
        (fm ~name ~@source))))
-
-;; The legacy names for fm and defm are cps-fn and def-cps-fn.
-;; These names are deprecated but preserved for compatibility.
-
-(defmacro ^:deprecated cps-fn
-  "legacy name for fm"
-  [& args]
-  `(fm ~@args))
-
-(defmacro ^:deprecated def-cps-fn
-  "legacy name for defm"
-  [& args]
-  `(defm ~@args))
-
-;; Functions can also be defined in Scheme-like rather
-;; than Clojure syntax. Again, this syntax is deprecated
-;; but preserved for compatibility.
-
-(defmacro ^:deprecated lambda
-  "defines function in Anglican syntax"
-  [& args]
-  `(fm ~@(next (alambda nil args))))
-
-(defmacro ^:deprecated defun
-  "binds variable to function in Anglican syntax"
-  [name & args]
-  `(defm ~@(next (alambda name args))))
 
 ;; Any non-CPS procedures can be used in the code,
 ;; but must be wrapped and re-bound.

@@ -4,18 +4,16 @@
 
 ;;;; Trampoline-ready Anglican program
 
-;; The input to this transformations is an Anglican program in
-;; clojure syntax (embang.xlat). The output is a Clojure function
-;; that returns either the next step as a structure incroprorating
-;; continuations and parameters, or the state containing a vector of
-;; predicted values and the sample weight.
+;;; Architecture Outline
 ;;
-;; Steps are delimited by random choices.  Between the steps, the
-;; inference decisions can be made.
+;; This module defines the transformation of an Anglican program
+;; into a function in continuation-passing style. The function
+;; itself is the initial continuation.
 ;;
-;; The state is threaded through computation and consists of
-;;   - the running sample weight
-;;   - the list of predicted values.
+;; Any continuation receives a value and a state, and returns
+;; either a thunk (an argumentless function) or a checkpoint ---
+;; an object corresponding to either 'sample', 'observe', or to
+;; returning the final result.
 
 (declare ^:dynamic *primitive-procedures*)
 
@@ -33,25 +31,39 @@
 (defn value-cont "returns value" [v _] v)
 (defn state-cont "returns state" [_ s] s)
 
-;; Interrupt points
+;; Checkpoints
+;;
+;; Checkpoints corresponding to 'sample' and 'observe' include a
+;; continuation. This continuation must be called to continue
+;; the execution after the inference algorithm processed the
+;; checkpoint. The 'result' checkpoint does not have a
+;; continuation. 
 
 (defrecord observe [id dist value cont state])
 (defrecord sample [id dist cont state])
 (defrecord result [state])
 
-;; Retrieval of final result
+;; Retrieval of the final result
 
 (defn result-cont [v s] (->result s))
 
-;; When a continuation is called, it is trampolined,
-;; that is, wrapped in a thunk. This collapses the stack
+;; When a continuation is called, it is wrapped in a thunk ---
+;; an argumentless function. This collapses the stack
 ;; and ensures that recursion of any depth does not cause
-;; stack overflow.
+;; stack overflow. Thunks should be used in conjunction with
+;; Clojure 'trampoline'.
 
 (defn continue
   "returns a trampolined call to continuation"
   [cont value state]
-  `(~'fn [] (~cont ~value ~state)))
+  (with-meta
+    `(~'fn [] (~cont ~value ~state))
+    {::continuation true}))
+
+(defn continuation?
+  "returns true if the form is a continuation"
+  [form]
+  (::continuation (meta form)))
 
 ;;; Expression predicates
 
@@ -120,8 +132,8 @@
       (fn-form? expr)
       (mem-form? expr)))
  
-;; Simple expressions, primitive procedure wrappers
-;; and fn forms are opaque.
+;; Simple expressions, primitive procedure wrappers,
+;; as well as fn and mem forms are opaque.
 
 (declare primitive-procedure-cps fn-cps mem-cps)
 (defn opaque-cps
@@ -141,7 +153,7 @@
 
 (def ^:dynamic *gensym* 
   "customized gensym for code generation,
-  bound to `symbol' in tests"
+  bound to 'symbol' in tests"
   gensym)
 
 ;;; Literal data structures --- vectors, maps and sets.
@@ -237,7 +249,7 @@
                  ~rst))))))
     (cps-of-do body cont)))
 
-;; `loop' is translated into an application of recursive
+;; 'loop' is translated into an application of recursive
 ;; function, due to the trampolining of all calls, there
 ;; is no need for loop/recur.
 
@@ -293,14 +305,14 @@
                ~(cps-of-expression thn cont)
                ~(cps-of-expression els cont))))))))
 
-;; `when' is translated into `if'.
+;; 'when' is translated into 'if'.
 
 (defn cps-of-when
   "transforms when to CPS"
   [args cont]
   (cps-of-if [(first args) `(~'do ~@(rest args))] cont))
 
-;; `cond' is translated into nested `if's.
+;; 'cond' is translated into nested 'if's.
 
 (defn cps-of-cond
   "transforms cond to CPS"
@@ -324,7 +336,7 @@
                        ;; The last clause is the default clause.
                        (let [[expr] clause]
                          [(cps-of-expression expr cont)])))
-                   ;; This magic call to `partition' breaks clauses
+                   ;; This magic call to 'partition' breaks clauses
                    ;; into two-element tuples, with the last tuple
                    ;; containing a single element if the number of
                    ;; clauses is odd (default clause is specified).
@@ -381,7 +393,7 @@
 
 (defn make-of-args
   "builds lexical bindings for all compound args
-  and then calls `make' to build expression
+  and then calls 'make' to build expression
   out of the args; used by predict, observe, sample, application"
   ([args make] (make-of-args args false make))
   ([args first-is-rator make]
@@ -408,9 +420,9 @@
 
 ;;; Probabilistic forms
 
-;; If `predict' has two arguments, then the first argument
+;; If 'predict' has two arguments, then the first argument
 ;; is used as the predict label. Otherwise the label is
-;; the symbolic representation of `predict''s argument.
+;; the symbolic representation of 'predict''s argument.
 
 (defn cps-of-predict
   "transforms predict to CPS,
@@ -427,7 +439,7 @@
                               `(add-predict ~'$state
                                             ~label ~value))))))
 
-;; `observe' and `select' may accept an optional argument at
+;; 'observe' and 'select' may accept an optional argument at
 ;; the first position. If the argument is specified, then
 ;; the value is the identifier of the checkpoint; otherwise,
 ;; the identifier is a statically generated symbol.
