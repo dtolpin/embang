@@ -7,6 +7,7 @@
                  [org.clojure/tools.cli "0.3.1"]
                  [org.clojure/data.json "0.2.6"]
                  [com.taoensso/timbre "3.4.0"]
+                 [org.clojure/algo.monads "0.1.5"]
                  [colt "1.2.0"]
                  [net.mikera/core.matrix "0.33.2"]
                  [net.mikera/vectorz-clj "0.29.0"]]
