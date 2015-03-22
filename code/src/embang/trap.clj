@@ -60,11 +60,6 @@
     `(~'fn [] (~cont ~value ~state))
     {::continuation true}))
 
-(defn continuation?
-  "returns true if the form is a continuation"
-  [form]
-  (::continuation (meta form)))
-
 ;;; Expression predicates
 
 (defn primitive-procedure?
@@ -501,7 +496,10 @@
                 (fn [acall]
                   (let [[rator & rands] acall]
                     (if (primitive-procedure? rator)
-                      (continue cont `(apply ~@acall) '$state)
+                      (continue cont 
+                                (with-meta
+                                  `(apply ~@acall) {::primitive true})
+                                '$state)
                       `(apply ~rator
                               ~cont ~'$state ~@rands))))))
 
@@ -514,7 +512,9 @@
                 (fn [call]
                   (let [[rator & rands] call]
                     (if (primitive-procedure? rator)
-                      (continue cont call '$state)
+                      (continue cont 
+                                (with-meta call {:primitive true})
+                                '$state)
                       `(~rator ~cont ~'$state ~@rands))))))
 
 ;;; Primitive procedures in value postition
