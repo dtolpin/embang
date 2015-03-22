@@ -108,8 +108,10 @@
     (dotransform form :literal)
     (dotransform 
       [txmap (m-map (fn [[k v]]
-                      ;; TODO --- this is wrong
-                         [(traverse-form k) (traverse-form v)])
+                      (dotransform
+                        [k (traverse-form k)
+                         v (traverse-form v)]
+                        [k v] :map-entry))
                     form)]
       (into {} txmap) :map)))
 
