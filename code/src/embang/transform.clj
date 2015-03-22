@@ -27,6 +27,20 @@
   [form]
   (:embang.trap/primitive (meta form)))
 
+;; Literal expressions evalute to themselves.
+
+(defn literal? 
+  "returns true when the form evalutes to itself"
+  [form]
+  (cond
+    (seq? form) (empty? form)
+    (vector? form) (every? literal? form)
+    (map? form) (every? (fn [[k v]] 
+                          (and (literal? k) (literal? v)))
+                        form)
+    (set? form) (every? literal? form)
+    :else (not (symbol? form))))
+
 ;; Functions for traversing anglican programs and applying
 ;; source-to-source transformations.
 
@@ -92,158 +106,174 @@
                  txform#)
        `(dotransform form tag))))
 
-(defn traverse-vector
-  "traverses vector"
-  [form]
-  (if (every? literal? form)
-    (dotransform form :literal)
-    (dotransform
-      [txvector (m-map traverse-form form)]
-      (into [] txvector) :vector)))
-
-(defn traverse-map
-  "traverses map"
-  [form]
-  (if (every? literal? form)
-    (dotransform form :literal)
-    (dotransform 
-      [txmap (m-map (fn [[k v]]
-                      (dotransform
-                        [k (traverse-form k)
-                         v (traverse-form v)]
-                        [k v] :map-entry))
-                    form)]
-      (into {} txmap) :map)))
-
-(defn traverse-set
-  "traverse-set"
-  [form]
-  (if (every? literal? form)
-    (dotransform form :literal)
-    (dotransform 
-      [txset (m-map traverse-form form)]
-      (into {} txset) :set)))
-
 (defn traverse-literal
   "traverses literal"
-  [form]
-  (dotransform form :literal))
-
-(defn traverse-quote
-  "traverses quote"
-  [[quote literal]]
-  (dotransform
-    [txliteral (traverse-literal literal)]
-    (list quote txliteral) :quote))
+  [literal]
+  (dotransform literal :literal))
 
 (declare traverse-form)
 
-(defn traverse-variable
-   "traverses variable definition"
-   [form]
-   (dotransform form :variable))
+(defn traverse-vector
+  "traverses vector"
+  [vector]
+  (dotransform
+    [txvector (m-map traverse-form vector)]
+    (into [] txvector) :vector))
 
-(defn traverse-parameter
-   "traverses parameter"
-   [form]
-   (dotransform form :parameter))
+(defn traverse-map
+  "traverses map"
+  [map]
+  (dotransform 
+    [txmap (m-map (fn [[key val]]
+                    (with-monad state-m
+                      (domonad
+                        [txkey (traverse-form key)
+                         txval (traverse-form val)]
+                        [txkey txval])))
+                  map)]
+    (into {} txmap) :map))
 
-(defn traverse-parameter-list
-  "traverses parameter list"
-  [form]
-  (cond
-    (a-pair? form)
-    (with-monad state-m
-      (domonad
-        [p (traverse-parameter (first form))
-         ps (traverse-parameter-list (next form))]
-        (cons p ps)))
+(defn traverse-set
+  "traverse-set"
+  [set]
+  (dotransform 
+    [txset (m-map traverse-form set)]
+    (into {} txset) :set))
 
-    (a-nil? form)
-    (with-monad state-m
-      (m-result '()))
-
-    :else
-    (dotransform form :variadic)))
+(defn traverse-quote
+  "traverses quote"
+  [[_ literal]]
+  (dotransform
+    [txliteral (traverse-literal literal)]
+    `(~'quote ~txliteral) :quote))
 
 (defn traverse-parameters
-    "traverse parameters"
-    [form]
-    (if (a-list? form) (traverse-parameter-list form)
-        (dotransform form :variadic)))
+  "traverses parameter list"
+  [parameters]
+  (dotransform parameters :parameters))
+
+(defn traverse-variable
+  "traverses variable"
+  [variable]
+  (dotransform variable :variable))
+
+(defn traverse-value
+  "traverses variable value"
+  [value]
+  (dotransform 
+    [txvalue (traverse-form value)]
+    txvalue :value))
 
 (defn traverse-binding
-  "traverses parameter"
-  [[variable expression]]
+  "traverses binding"
+  [[variable value]]
   (dotransform
     [txvariable (traverse-variable variable)
-     txexpression (traverse-form expression)]
-    (list txvariable txexpression) :binding))
-
- (defn traverse-reference
-   "traverses variable reference"
-   [form]
-   (dotransform form :reference))
-
-(defn traverse-application
-  "traverses application"
-  [form]
-  (dotransform
-    [txform (m-map traverse-form form)]
-    txform :application))
+     txvalue (traverse-value value)]
+    [txvariable txvalue] :binding))
 
 (defn traverse-fn
-  "traverses lambda form"
-  [[lambda parameters & expressions]]
+  "traverses fn"
+  [[_ parameters & expressions]]
   (dotransform
     [txparameters (traverse-parameters parameters)
      txexpressions (m-map traverse-form expressions)]
-    (list* lambda txparameters txexpressions) :lambda))
+    `(~'fn ~txparameters ~txexpressions) :fn))
 
 (defn traverse-let
-  "traverses let form"
-  [[let bindings & expressions]]
+  "traverses let"
+  [[_ bindings & expressions]]
   (dotransform
-    [txbindings (m-map traverse-binding bindings)
+    [txbindings (m-map traverse-binding 
+                       (partition 2 bindings))
      txexpressions (m-map traverse-form expressions)]
-    (list* let txbindings txexpressions) :let))
+    `(~'let [~@(map concat txbindings)] ~@txexpressions) :let))
 
 (defn traverse-if
-  "traverses if form"
-  [[if cond then else]]
-  (if (some? else)
-    (dotransform
-      [txcond (traverse-form cond)
-       txthen (traverse-form then)
-       txelse (traverse-form else)]
-      (list if txcond txthen txelse) :if)
-    (dotransform
-      [txcond (traverse-form cond)
-       txthen (traverse-form then)]
-      (list if txcond txthen) :if)))
+  "traverses if"
+  [[_ cond then else]]
+  (dotransform
+    [txcond (traverse-form cond)
+     txthen (traverse-form then)
+     txelse (traverse-form else)]
+    `(~'if ~txcond ~txthen ~txelse) :if))
+
+(defn traverse-case
+  "traverses case"
+  [form]
+  (dotransform form :case))
 
 (defn traverse-do
-  "traverses begin form"
+  "traverses do"
   [[begin & expressions]]
   (dotransform
     [txexpressions (m-map traverse-form expressions)]
-    (list* begin txexpressions) :do))
+    `(~'do ~@txexpressions) :do))
 
 (defn traverse-observe
-  "traverses observe form, the distribution fires the
-  `:distribution' rather than `:application' event"
-  [[observe distribution observation]]
+  "traverses observe"
+  [form]
+  (dotransform form :observe))
+
+(defn traverse-sample
+  "traverses sample"
+  [form]
+  (dotransform form :sample))
+
+(defn traverse-result
+  "traverses result"
+  [form]
+  (dotransform form :result))
+
+(defn traverse-add-predict
+  "traverses add-predict"
+  [form]
+  (dotransform form :add-predict))
+
+(defn traverse-get-mem
+  "traverses get-mem"
+  [form]
+  (dotransform form :get-mem))
+
+(defn traverse-set-mem
+  "traverses set-mem"
+  [form]
+  (dotransform form :set-mem))
+
+(defn traverse-store
+  "traverses store"
+  [form]
+  (dotransform form :store))
+
+(defn traverse-retrieve
+  "traverses retrieve"
+  [form]
+  (dotransform form :retrieve))
+
+(defn traverse-apply
+  "traverses apply"
+  [_ & args]
   (dotransform
-    [txdistribution (dotransform
-                      [txexpressions (m-map traverse-form distribution)]
-                      txexpressions :distribution)
-     txobservation (traverse-form observation)]
-    (list observe txdistribution txobservation) :observe))
+    [txargs (m-map traverse-form args)]
+    `(~'apply ~@args) :apply))
+
+(defn traverse-application
+  "traverses application"
+  [application]
+  (dotransform
+    [txapplication (m-map traverse-form form)]
+    txapplication :application))
+
+ (defn traverse-reference
+   "traverses variable reference"
+   [reference]
+   (dotransform reference :reference))
 
 (defn traverse-form
   "traverses form"
   [form]
   ((cond
+     (literal? form) traverse-literal
      (vector? form) traverse-vector
      (map? form) traverse-map
      (set? form) traverse-set
@@ -274,10 +304,8 @@
        clojure.core/apply       traverse-apply
        traverse-application)
 
-     ;; The empty list is a compound literal.
-     (and (seq? form) (empty? form)) traverse-literal
      ;; A symbol is a reference.
      (symbol? form) traverse-reference
-     ;; Otherwise, this is an atomic literal.
-     :else traverse-literal)
+     ;; No other options.
+     (throw (AssertionError. (format "cannot traverse %s" form))))
    form))
