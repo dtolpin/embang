@@ -99,7 +99,28 @@
     (dotransform form :literal)
     (dotransform
       [txvector (m-map traverse-form form)]
-      txvector :vector)))
+      (into [] txvector) :vector)))
+
+(defn traverse-map
+  "traverses map"
+  [form]
+  (if (every? literal? form)
+    (dotransform form :literal)
+    (dotransform 
+      [txmap (m-map (fn [[k v]]
+                      ;; TODO --- this is wrong
+                         [(traverse-form k) (traverse-form v)])
+                    form)]
+      (into {} txmap) :map)))
+
+(defn traverse-set
+  "traverse-set"
+  [form]
+  (if (every? literal? form)
+    (dotransform form :literal)
+    (dotransform 
+      [txset (m-map traverse-form form)]
+      (into {} txset) :set)))
 
 (defn traverse-literal
   "traverses literal"
