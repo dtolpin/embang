@@ -5,6 +5,8 @@
 
 (declare traverse-form)
 
+;;; Public interface
+
 (defn traverse
   "traverses Anglican source code, as produced
   by the CPS compiler (embang.trap).
