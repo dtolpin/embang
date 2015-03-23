@@ -1,7 +1,18 @@
-(ns anglican.transform
+(ns embang.transform
   (:require [clojure.algo.monads
              :refer [with-monad domonad m-result m-map state-m]])
   (:use [embang state trap]))
+
+(declare traverse-form)
+
+(defn traverse
+  "traverses Anglican source code, as produced
+  by the CPS compiler (embang.trap).
+  Parameters:
+   - code     the code
+   - tx       the transformation to apply."
+  [form tx]
+  ((traverse-form form) tx))
 
 ;;; Transformed expression predicates
 
@@ -76,17 +87,6 @@
 
 (defmethod transform :default [form _ tx] [form tx])
 
-(declare traverse-form)
-
-(defn traverse
-  "traverses Anglican code, as produced
-  by the CPS compiler (embang.trap).
-  Parameters:
-   - code     the code
-   - tx       the transformation to apply."
-  [form tx]
-  ((traverse-form code) tx))
-
 ;; At many occasions the transformer applies transformations
 ;; through monadic computations to parts of an expression
 ;; and then calls transform on the re-built expression.
@@ -110,8 +110,6 @@
   "traverses literal"
   [literal]
   (dotransform literal :literal))
-
-(declare traverse-form)
 
 (defn traverse-vector
   "traverses vector"
@@ -178,7 +176,7 @@
   (dotransform
     [txparameters (traverse-parameters parameters)
      txexpressions (m-map traverse-form expressions)]
-    `(~'fn ~txparameters ~txexpressions) :fn))
+    `(~'fn ~txparameters ~@txexpressions) :fn))
 
 (defn traverse-let
   "traverses let"
@@ -187,7 +185,7 @@
     [txbindings (m-map traverse-binding 
                        (partition 2 bindings))
      txexpressions (m-map traverse-form expressions)]
-    `(~'let [~@(map concat txbindings)] ~@txexpressions) :let))
+    `(~'let [~@(apply concat txbindings)] ~@txexpressions) :let))
 
 (defn traverse-if
   "traverses if"
@@ -261,7 +259,7 @@
   "traverses application"
   [application]
   (dotransform
-    [txapplication (m-map traverse-form form)]
+    [txapplication (m-map traverse-form application)]
     txapplication :application))
 
  (defn traverse-reference
@@ -307,5 +305,6 @@
      ;; A symbol is a reference.
      (symbol? form) traverse-reference
      ;; No other options.
-     (throw (AssertionError. (format "cannot traverse %s" form))))
+     :else (throw (AssertionError.
+                    (format "cannot traverse %s" form))))
    form))
