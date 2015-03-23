@@ -46,8 +46,8 @@
   (cond
     (seq? form) (empty? form)
     (vector? form) (every? literal? form)
-    (map? form) (every? (fn [[k v]] 
-                          (and (literal? k) (literal? v)))
+    (map? form) (every? (fn [[key val]] 
+                          (and (literal? key) (literal? val)))
                         form)
     (set? form) (every? literal? form)
     :else (not (symbol? form))))
@@ -113,14 +113,14 @@
 
 (defn traverse-vector
   "traverses vector"
-  [vector]
+  [vector*]
   (dotransform
-    [txvector (m-map traverse-form vector)]
+    [txvector (m-map traverse-form vector*)]
     (into [] txvector) :vector))
 
 (defn traverse-map
   "traverses map"
-  [map]
+  [map*]
   (dotransform 
     [txmap (m-map (fn [[key val]]
                     (with-monad state-m
@@ -128,22 +128,22 @@
                         [txkey (traverse-form key)
                          txval (traverse-form val)]
                         [txkey txval])))
-                  map)]
+                  map*)]
     (into {} txmap) :map))
 
 (defn traverse-set
   "traverse-set"
-  [set]
+  [set*]
   (dotransform 
-    [txset (m-map traverse-form set)]
+    [txset (m-map traverse-form set*)]
     (into {} txset) :set))
 
 (defn traverse-quote
   "traverses quote"
-  [[_ literal]]
+  [[quote* literal]]
   (dotransform
     [txliteral (traverse-literal literal)]
-    `(~'quote ~txliteral) :quote))
+    `(~quote* ~txliteral) :quote))
 
 (defn traverse-parameters
   "traverses parameter list"
@@ -172,41 +172,56 @@
 
 (defn traverse-fn
   "traverses fn"
-  [[_ parameters & expressions]]
+  [[fn* parameters & expressions]]
   (dotransform
     [txparameters (traverse-parameters parameters)
      txexpressions (m-map traverse-form expressions)]
-    `(~'fn ~txparameters ~@txexpressions) :fn))
+    `(~fn* ~txparameters ~@txexpressions) :fn))
 
 (defn traverse-let
   "traverses let"
-  [[_ bindings & expressions]]
+  [[let* bindings & expressions]]
   (dotransform
     [txbindings (m-map traverse-binding 
                        (partition 2 bindings))
      txexpressions (m-map traverse-form expressions)]
-    `(~'let [~@(apply concat txbindings)] ~@txexpressions) :let))
+    `(~let* [~@(apply concat txbindings)] ~@txexpressions) :let))
 
 (defn traverse-if
   "traverses if"
-  [[_ cond then else]]
+  [[if* cond then else]]
   (dotransform
     [txcond (traverse-form cond)
      txthen (traverse-form then)
      txelse (traverse-form else)]
-    `(~'if ~txcond ~txthen ~txelse) :if))
+    `(~if* ~txcond ~txthen ~txelse) :if))
+
+(defn traverse-case-clause
+  "traverses case clause"
+  [clause]
+  (if (= (count clause) 2)
+    (dotransform
+      [txtag (traverse-literal (first clause))
+       txexpr (traverse-form (second clause))]
+      [txtag txexpr] :clause)
+    (dotransform
+      [txexpr (traverse-form (first clause))]
+      [txexpr] :default-clause)))
 
 (defn traverse-case
   "traverses case"
-  [form]
-  (dotransform form :case))
+  [[case* & clauses]]
+  (dotransform
+    [txclauses (m-map traverse-case-clause
+                      (partition 2 2 nil clauses))]
+    `(~case* ~@(apply concat txclauses)) :case))
 
 (defn traverse-do
   "traverses do"
-  [[begin & expressions]]
+  [[do* & expressions]]
   (dotransform
     [txexpressions (m-map traverse-form expressions)]
-    `(~'do ~@txexpressions) :do))
+    `(~do* ~@txexpressions) :do))
 
 (defn traverse-observe
   "traverses observe"
@@ -250,10 +265,10 @@
 
 (defn traverse-apply
   "traverses apply"
-  [_ & args]
+  [[apply* & args]]
   (dotransform
     [txargs (m-map traverse-form args)]
-    `(~'apply ~@args) :apply))
+    `(~apply* ~@txargs) :apply))
 
 (defn traverse-application
   "traverses application"
