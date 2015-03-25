@@ -1,4 +1,5 @@
 (ns embang.emit
+  "Top-level forms for Anglican programs"
   (:use [embang.trap :only [*gensym*
                             shading-primitive-procedures
                             cps-of-expression result-cont 
