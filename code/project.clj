@@ -22,5 +22,5 @@
   :java-source-paths ["src"]
   :resource-paths ["../examples"]
   :profiles {:uberjar {:aot :all}}
-  :deploy-branches ["master"]
+  :deploy-branches ["master" "optimize"]
   :aliases {"publish" ["do" ["clean"] ["test"] ["uberjar"]]})

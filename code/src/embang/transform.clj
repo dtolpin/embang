@@ -97,7 +97,7 @@
 
 (defmacro dotransform
   "macro wrapper over monadic steps,
-  if the steps are supplied and are note empty,
+  if the steps are supplied and are not empty,
   the final transform is performed on the result
   of the last step"
   ([form tag] `#(transform ~form ~tag %))
