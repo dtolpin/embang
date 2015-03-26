@@ -1,9 +1,15 @@
 (ns embang.emit
   "Top-level forms for Anglican programs"
+
+  ;; Essential CPS transformation calls
   (:use [embang.trap :only [*gensym*
                             shading-primitive-procedures
                             cps-of-expression result-cont 
-                            fn-cps primitive-procedure-cps]]))
+                            fn-cps primitive-procedure-cps]])
+
+  ;; Pre- and post-processing
+  (:require [embang.pre :as pre]
+            [embang.post :as post]))
 
 ;;;; Top-level forms for Anglican programs
 
@@ -43,7 +49,10 @@
     (overriding-higher-order-functions
       (shading-primitive-procedures (if (vector? value) value [value])
         `(~'fn ~(*gensym* "query") [~value ~'$state]
-           ~(cps-of-expression `(~'do ~@source) result-cont))))))
+           ~(-> `(~'do ~@source)
+                pre/process
+                (cps-of-expression result-cont)
+                post/process))))))
 
 (defmacro defquery
   "binds variable to m! program"
@@ -66,7 +75,10 @@
   useful for defining functions outside of defanglican"
   [& args]
   (overriding-higher-order-functions
-    (fn-cps args)))
+    (-> `(fn ~@args)
+        pre/process
+        rest fn-cps
+        post/process)))
 
 (defmacro defm
   "binds variable to function in CPS form"
@@ -82,10 +94,13 @@
                             ~@(first source)])})
        (fm ~name ~@source))))
 
-;; Any non-CPS procedures can be used in the code,
-;; but must be wrapped and re-bound.
+;; Any non-CPS procedures can be used in the code, but must be
+;; either declared primitive inside the code or wrapped and
+;; re-bound. `with-primitive-procedures' is deprecated in favour
+;; of `(declare :primitive ...)', but supported for
+;; compatibility.
 
-(defmacro
+(defmacro ^:deprecated
   with-primitive-procedures
   "binds primitive procedure names to their CPS versions;
   if procedure name is qualified, it becomes unqualified in
