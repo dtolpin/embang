@@ -20,6 +20,6 @@
 
 (defm DPmem [alpha h]
   (let [C (crp alpha)
-        f (mem (lambda (s args) (apply h args)))]
+        f (mem (fn [s args] (apply h args)))]
     (fn [& args]
       (f (C) args))))
