@@ -18,6 +18,13 @@
 
 (declare ^:dynamic *primitive-procedures*)
 
+(defmacro adding-primitive-procedures
+  "includes names into the set of primitive procedures"
+  [names & body]
+  `(binding [*primitive-procedures*
+             (reduce conj *primitive-procedures* (flatten ~names))]
+     ~@body))
+
 (defmacro shading-primitive-procedures
   "excludes names from the set of primitive procedures"
   [names & body]
@@ -62,6 +69,11 @@
     {::continuation true}))
 
 ;;; Expression predicates
+
+(defn declaration?
+  "true if the form is a declaration"
+  [form]
+  (and (seq? form) (= 'declare (first form))))
 
 (defn primitive-procedure?
   "true if the procedure is primitive,
@@ -377,13 +389,19 @@
 (defn cps-of-do
   "transforms do to CPS"
   [exprs cont]
-  (let [[fst & rst] exprs]
-    (cps-of-expression
-      fst
-      (if (seq rst)
-        `(~'fn ~(*gensym* "do") [~'_ ~'$state]
-           ~(cps-of-do rst cont))
-        cont))))
+  (let [[expr & exprs] exprs]
+    (if (declaration? expr)
+      (let [[_ kwd & args] expr]
+        (case kwd
+          :primitive (adding-primitive-procedures args
+                       (cps-of-do exprs cont))
+          (assert false (format "Unknown declaration %s" expr))))
+      (cps-of-expression
+        expr
+        (if (seq exprs)
+          `(~'fn ~(*gensym* "do") [~'_ ~'$state]
+             ~(cps-of-do exprs cont))
+          cont)))))
 
 ;;; Applications and applicative forms
 
@@ -558,7 +576,7 @@
                      apply     (cps-of-apply args cont)
                      ;; application
                                (cps-of-application expr cont)))
-    :else (assert false (str "Cannot transform " expr " to CPS"))))
+    :else (assert false (format "Cannot transform %s to CPS" expr))))
 
 (def ^:dynamic *primitive-procedures*
   "primitive procedures, do not exist in CPS form"
