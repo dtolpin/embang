@@ -31,9 +31,10 @@
         pfilter.clj    --- Particle Filter
 
         # Code transformations
-        xlat.clj       --- Anglican to Clojure
         trap.clj       --- Clojure to CPS
         emit.clj       --- Compiling CPS 
+        pre.clj        --- Preprocessing of m! code
+        post.clj       --- Postprocessing of CPS-transformed code
 
         # Java
         MTMersenneTwister.java --- thread-safe synchronized version
