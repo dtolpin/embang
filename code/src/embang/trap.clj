@@ -1,7 +1,8 @@
 (ns embang.trap
   "CPS transformation of Anglican program"
-  (:require embang.runtime)
-  (:use embang.state))
+  (:require embang.runtime) ; for primitive procedure names
+  (:use embang.ast
+        embang.state))
 
 ;;;; Trampoline-ready Anglican program
 
@@ -13,7 +14,7 @@
 ;;
 ;; Any continuation receives a value and a state, and returns
 ;; either a thunk (an argumentless function) or a checkpoint ---
-;; an object corresponding to either 'sample', 'observe', or to
+;; an object corresponding to either `sample', `observe', or to
 ;; returning the final result.
 
 (declare ^:dynamic *primitive-procedures*)
@@ -41,10 +42,10 @@
 
 ;; Checkpoints
 ;;
-;; Checkpoints corresponding to 'sample' and 'observe' include a
+;; Checkpoints corresponding to `sample' and `observe' include a
 ;; continuation. This continuation must be called to continue
 ;; the execution after the inference algorithm processed the
-;; checkpoint. The 'result' checkpoint does not have a
+;; checkpoint. The `result' checkpoint does not have a
 ;; continuation. 
 
 (defrecord observe [id dist value cont state])
@@ -59,7 +60,7 @@
 ;; an argumentless function. This collapses the stack
 ;; and ensures that recursion of any depth does not cause
 ;; stack overflow. Thunks should be used in conjunction with
-;; Clojure 'trampoline'.
+;; Clojure `trampoline'.
 
 (defn continue
   "returns a trampolined call to continuation"
@@ -205,14 +206,12 @@
 (defn fn-cps
   "transforms function definition to CPS form"
   [args]
-  (if (vector? (first args))
-    (fn-cps `[nil ~@args])
-    (let [[name parms & body] args
-          cont (*gensym* "C")]
-      (shading-primitive-procedures parms
-        `(~'fn ~(or name (*gensym* "fn"))
-           [~cont ~'$state ~@parms]
-           ~(cps-of-do body cont))))))
+  (let [[name parms & body] (fn-args args)
+        cont (*gensym* "C")]
+    (shading-primitive-procedures parms
+      `(~'fn ~(or name (*gensym* "fn"))
+         [~cont ~'$state ~@parms]
+         ~(cps-of-do body cont)))))
 
 (defn mem-cps
   "transforms mem to CPS"
@@ -264,7 +263,7 @@
                  ~rst))))))
     (cps-of-do body cont)))
 
-;; 'loop' is translated into an application of recursive
+;; `loop' is translated into an application of recursive
 ;; function, due to the trampolining of all calls, there
 ;; is no need for loop/recur.
 
@@ -304,10 +303,7 @@
   cps-of-if
   "transforms if to CPS"
   [args cont]
-  (let [[cnd thn els & rst] args]
-    (assert (empty? rst)
-            (format "Invalid number of args (%d) passed to if"
-                    (count args)))
+  (let [[cnd thn els & rst] (if-args args)]
     (if (opaque? cnd)
       `(~'if ~(opaque-cps cnd)
          ~(cps-of-expression thn cont)
@@ -316,18 +312,17 @@
         cnd
         (let [cnd (*gensym* "I")]
           `(~'fn ~(*gensym* "if") [~cnd ~'$state]
-             (~'if ~cnd
-               ~(cps-of-expression thn cont)
-               ~(cps-of-expression els cont))))))))
+             ;; Call `cps-of-expression' to detect simple `if'.
+             ~(cps-of-expression `(~'if ~cnd ~thn ~els) cont)))))))
 
-;; 'when' is translated into 'if'.
+;; `when' is translated into `if'.
 
 (defn cps-of-when
   "transforms when to CPS"
   [args cont]
   (cps-of-if [(first args) `(~'do ~@(rest args))] cont))
 
-;; 'cond' is translated into nested 'if's.
+;; `cond' is translated into nested `if's.
 
 (defn cps-of-cond
   "transforms cond to CPS"
@@ -344,24 +339,29 @@
   (let [[key & clauses] args]
     (if (opaque? key)
       `(~'case ~(opaque-cps key)
-         ~@(mapcat (fn [clause]
-                     (if (= (count clause) 2)
-                       (let [[tag expr] clause]
-                         [tag (cps-of-expression expr cont)])
-                       ;; The last clause is the default clause.
-                       (let [[expr] clause]
-                         [(cps-of-expression expr cont)])))
-                   ;; This magic call to 'partition' breaks clauses
-                   ;; into two-element tuples, with the last tuple
-                   ;; containing a single element if the number of
-                   ;; clauses is odd (default clause is specified).
-                   (partition 2 2 nil clauses)))
+         ~@(apply
+             concat
+             (loop [clauses clauses
+                    cps-clauses []]
+               (if (seq clauses)
+                 (if (rest clauses)
+                   ;; Normal clause.
+                   (let [[tag expr & clauses] clauses]
+                     (recur
+                       clauses
+                       (conj cps-clauses 
+                             [tag (cps-of-expression expr cont)])))
+                   ;; Default clause.
+                   (let [[expr] clauses]
+                     (conj cps-clauses
+                           [(cps-of-expression expr cont)])))
+                 cps-clauses))))
       (cps-of-expression
         key
         (let [key (*gensym* "K")]
           `(~'fn ~(*gensym* "case") [~key ~'$state]
-             ~(cps-of-expression
-                `(~'case ~key ~@clauses) cont)))))))
+             ;; Call `cps-of-expression' to detect simple `case'.
+             ~(cps-of-expression `(~'case ~key ~@clauses) cont)))))))
 
 (defn-with-named-cont
   cps-of-and
@@ -441,9 +441,9 @@
 
 ;;; Probabilistic forms
 
-;; If 'predict' has two arguments, then the first argument
+;; If `predict' has two arguments, then the first argument
 ;; is used as the predict label. Otherwise the label is
-;; the symbolic representation of 'predict''s argument.
+;; the symbolic representation of `predict''s argument.
 
 (defn cps-of-predict
   "transforms predict to CPS,
@@ -460,7 +460,7 @@
                               `(add-predict ~'$state
                                             ~label ~value))))))
 
-;; 'observe' and 'select' may accept an optional argument at
+;; `observe' and `sample' may accept an optional argument at
 ;; the first position. If the argument is specified, then
 ;; the value is the identifier of the checkpoint; otherwise,
 ;; the identifier is a statically generated symbol.
@@ -582,7 +582,7 @@
                      retrieve  (cps-of-retrieve args cont)
                      apply     (cps-of-apply args cont)
                      ;; application
-                               (cps-of-application expr cont)))
+                     (cps-of-application expr cont)))
     :else (assert false (format "Cannot transform %s to CPS" expr))))
 
 (def ^:dynamic *primitive-procedures*
