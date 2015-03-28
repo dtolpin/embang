@@ -190,4 +190,4 @@
           sample-seq (if number-of-samples
                        (take number-of-samples sample-seq)
                        sample-seq)]
-      (map-seq sample-seq (Math/log 0.)))))
+      (map-seq sample-seq (/ -1. 0.)))))
