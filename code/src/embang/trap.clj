@@ -92,7 +92,7 @@
 (defn fn-form?
   "true when the argument is a fn form"
   [expr]
-  (and (seq? expr) (= (first expr) 'fn)))
+  (and (seq? expr) ('#{fn fn*} (first expr))))
 
 (defn mem-form?
   "true when the argument is a mem form"
@@ -223,8 +223,7 @@
 
         ;; If the argument of mem is a named lambda,
         ;; move the name to outer function.
-        [name expr] (if (and (seq? arg)
-                             (= (first arg) 'fn)
+        [name expr] (if (and (fn-form? arg)
                              (symbol? (second arg)))
                       [(second arg) `(~'fn ~@(nnext arg))]
                       [nil arg])]
