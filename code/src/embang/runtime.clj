@@ -39,17 +39,13 @@
   (sample [this]
     "draws a sample from the distribution")
   (observe [this value]
-    "return the log probability of the value"))
+    "return the probability [density] of the value"))
 
-;; `sample' and `observe' are both protocol methods and special
-;; forms in Anglican. To generate random values without exposing
-;; the random choice as a checkpoint, use `sample*'. To compute
-;; log probability, use `observe*'
+;; `sample' is both a protocol method and a special form in
+;; Anglican. To generate random values without exposing the random
+;; choice as a checkpoint, use `sample*'.
 
 (def sample* "draws a sample from the distribution" sample)
-(def observe* "returns the log probability of the value" observe)
-
-;;
 
 ;; Log probabilities are used pervasively. A precision-preserving
 ;; way to add probabilities (e.g. for computing union probability)
@@ -85,31 +81,27 @@
 (defmacro defdist
   "defines distribution"
   [name & args]
-  (let [[docstring parameters & args]
+  (let [[docstring parameters bindings & methods]
         (if (string? (first args))
           args
-          `(~(format "%s distribution" name) ~@args))
-        [bindings & methods]
-        (if (vector? (first args))
-          args
-          `[[] ~@args])
-        record-name (symbol (format "%s-distribution" name))
-        variables (take-nth 2 bindings)]
-    `(do
-       (declare ~name)
-       (defrecord ~record-name [~@parameters ~@variables]
-         Object
-         (toString [~'this]
-           (str (list '~(qualify name) ~@parameters)))
-         distribution
-         ~@methods)
-       (defn ~name ~docstring ~parameters
-         (let ~bindings
-           (~(symbol (format "->%s" record-name))
-                     ~@parameters ~@variables)))
-       (defmethod print-method ~record-name 
-         [~'o ~'m]
-         (print-simple (str ~'o) ~'m)))))
+          `(~(format "%s distribution" name) ~@args))]
+    (let [record-name (symbol (format "%s-distribution" name))
+          variables (take-nth 2 bindings)]
+      `(do
+         (declare ~name)
+         (defrecord ~record-name [~@parameters ~@variables]
+           Object
+           (toString [~'this]
+             (str (list '~(qualify name) ~@parameters)))
+           distribution
+           ~@methods)
+         (defn ~name ~docstring ~parameters
+           (let ~bindings
+             (~(symbol (format "->%s" record-name))
+                       ~@parameters ~@variables)))
+         (defmethod print-method ~record-name
+           [~'o ~'m]
+           (print-simple (str ~'o) ~'m))))))
 
 ;; Many distributions are available in the Colt library and
 ;; imported automatically.
@@ -119,7 +111,7 @@
   ([name args vtype]
    `(from-colt ~name ~args ~vtype (~(str/capitalize name) ~@args)))
   ([name args vtype [colt-name & colt-args]]
-   `(defdist ~(symbol name) 
+   `(defdist ~(symbol name)
       ~(format "%s distribution (imported from colt)" name)
       ~args
       [dist# (~(symbol (format "cern.jet.random.%s." colt-name))
@@ -157,23 +149,23 @@
   "discrete distribution, accepts unnormalized weights"
   [weights] [total-weight (double (reduce + weights))
              dist (cern.jet.random.Uniform. 0. total-weight RNG)]
-  (sample [this] 
+  (sample [this]
     (let [x (.nextDouble dist)]
       (loop [[weight & weights] weights
              acc 0. value 0]
         (let [acc (+ acc weight)]
           (if (< x acc) value
             (recur weights acc (inc value)))))))
-  (observe [this value] 
+  (observe [this value]
     (Math/log
-      (try 
+      (try
         (/ (nth weights value) total-weight)
         ;; any value not in the support has zero probability.
         (catch IndexOutOfBoundsException _ 0.)))))
 
 (declare gamma) ; Gamma distribution used in Dirichlet distribution
 
-(defn log-gamma-fn 
+(defn log-gamma-fn
   "log Gamma function"
   [x]
   (cern.jet.stat.Gamma/logGamma x))
@@ -188,7 +180,7 @@
                 t (reduce + g)]
             (map #(/ % t) g)))
   (observe [this value]
-           (- (reduce + (map (fn [v a] (* (Math/log v) (- a 1))) 
+           (- (reduce + (map (fn [v a] (* (Math/log v) (- a 1)))
                              value
                              alpha))
               @Z)))
@@ -220,8 +212,8 @@
   [min max] [dist (uniform-continuous min max)
              p (/ 1. (- max min))]
   (sample [this] (int (sample dist)))
-  (observe [this value] 
-           (Math/log 
+  (observe [this value]
+           (Math/log
              (if (and (integer? value)
                       (<= min value) (< value max))
                p 0.))))
@@ -232,9 +224,10 @@
     "accepts a vector of random values and generates
     a sample from the multivariate distribution"))
 
+
 (defdist mvn
   "multivariate normal"
-  [mean cov] [k (count mean)     ; number of dimensions
+  [mean cov] [k (m/ecount mean)     ; number of dimensions
               Lcov (:L (ml/cholesky (m/matrix cov)))
               unit-normal (normal 0 1)
               Z (delay (let [|Lcov| (reduce * (m/diagonal Lcov))]
@@ -287,43 +280,39 @@
   "random process"
   (produce [this]
     "produces a static random source")
-    
+
   (absorb [this sample]
     "absorbs the sample and returns a new process"))
 
 (defmacro defproc
   "defines random process"
   [name & args]
-  (let [[docstring parameters & args]
+  (let [[docstring parameters bindings & methods]
         (if (string? (first args))
           args
-          `(~(format "%s random process" name) ~@args))
-        [bindings & methods]
-        (if (vector? (first args))
-          args
-          `[[] ~@args])
-        record-name (symbol (format "%s-process" name))
-        variables (take-nth 2 bindings)
-        values (take-nth 2 (rest bindings))]
-    `(do
-       (declare ~name)
-       (defrecord ~record-name [~@parameters ~@variables]
-         Object
-         (toString [~'this]
-           (str (list '~(qualify name) ~@parameters)))
-         random-process
-         ~@methods)
-       (defn ~name ~docstring 
-         ;; Include parameters-only overload only if variables
-         ;; are not empty.
-         ~@(when (seq variables)
-             `((~parameters (~name ~@parameters ~@values))))
-         ([~@parameters ~@variables]
-          (~(symbol (format "->%s" record-name))
-                    ~@parameters ~@variables)))
-       (defmethod print-method ~record-name 
-         [~'o ~'m]
-         (print-simple (str ~'o) ~'m)))))
+          `(~(format "%s random process" name) ~@args))]
+    (let [record-name (symbol (format "%s-process" name))
+          variables (take-nth 2 bindings)
+          values (take-nth 2 (rest bindings))]
+      `(do
+         (declare ~name)
+         (defrecord ~record-name [~@parameters ~@variables]
+           Object
+           (toString [~'this]
+             (str (list '~(qualify name) ~@parameters)))
+           random-process
+           ~@methods)
+         (defn ~name ~docstring
+           ;; Include parameters-only overload only if variables
+           ;; are not empty.
+           ~@(when (seq variables)
+               `((~parameters (~name ~@parameters ~@values))))
+           ([~@parameters ~@variables]
+            (~(symbol (format "->%s" record-name))
+                      ~@parameters ~@variables)))
+         (defmethod print-method ~record-name
+           [~'o ~'m]
+           (print-simple (str ~'o) ~'m))))))
 
 ;; Random processes can accept and return functions,
 ;; and translations in and out of CPS form must be performed.
@@ -345,7 +334,7 @@
 ;; Random process types, in alphabetical order.
 
 (defdist discrete-crp
-  "discrete distribution extended 
+  "discrete distribution extended
   by a random sample, for use with CRP"
   [counts alpha] [dist (discrete (conj counts alpha))]
   (sample [this] (sample dist))
@@ -357,7 +346,7 @@
   "Chinese Restaurant process"
   [alpha] [counts []]
   (produce [this] (discrete-crp counts alpha))
-  (absorb [this sample] 
+  (absorb [this sample]
     (CRP alpha
          (-> counts
              ;; Fill the counts with alpha (corresponding to
@@ -370,7 +359,7 @@
   by a random sample, for use with DP"
   [counts H alpha] [dist (categorical
                            (vec (conj counts [::new alpha])))]
-  (sample [this] 
+  (sample [this]
     (let [s (sample dist)]
       ;; When a `new' value is drawn, sample the actual
       ;; value from the base measure.
@@ -398,13 +387,13 @@
   "Gaussian process"
   ;; GP is intended to be called from inside m! programs,
   ;; where CPS-transformed functions are passed.
-  [m$ k$] [m (uncps m$) 
-           k (uncps k$) 
+  [m$ k$] [m (uncps m$)
+           k (uncps k$)
            points []]
   (produce [this]
     ;; The formulae are taken from
     ;;   http://mlg.eng.cam.ac.uk/pub/pdf/Ras04.pdf
-    ;; Carl Edward Rasmussen. Gaussian processes in machine learning. 
+    ;; Carl Edward Rasmussen. Gaussian processes in machine learning.
     ;; In Revised Lectures, volume 3176 of Lecture Notes in Computer
     ;; Science (LNCS), pages 63-71. Springer-Verlag, Heidelberg, 2004.
     (cps
