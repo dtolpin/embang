@@ -47,7 +47,7 @@
 ;; log probability, use `observe*'
 
 (def sample* "draws a sample from the distribution" sample)
-(def observe* "returns the log probability of the value")
+(def observe* "returns the log probability of the value" observe)
 
 ;;
 
