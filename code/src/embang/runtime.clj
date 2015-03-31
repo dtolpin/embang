@@ -39,13 +39,17 @@
   (sample [this]
     "draws a sample from the distribution")
   (observe [this value]
-    "return the probability [density] of the value"))
+    "return the log probability of the value"))
 
-;; `sample' is both a protocol method and a special form in
-;; Anglican. To generate random values without exposing the random
-;; choice as a checkpoint, use `sample*'.
+;; `sample' and `observe' are both protocol methods and special
+;; forms in Anglican. To generate random values without exposing
+;; the random choice as a checkpoint, use `sample*'. To compute
+;; log probability, use `observe*'
 
 (def sample* "draws a sample from the distribution" sample)
+(def observe* "returns the log probability of the value")
+
+;;
 
 ;; Log probabilities are used pervasively. A precision-preserving
 ;; way to add probabilities (e.g. for computing union probability)

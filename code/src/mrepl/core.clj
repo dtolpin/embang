@@ -1,4 +1,5 @@
 (ns mrepl.core
+  "Inference and result processing wrappers for use with Gorilla REPL"
   (:require [embang
              [inference :refer [infer warmup]]
              [core :refer [load-algorithm]]
@@ -31,5 +32,12 @@
 
 ;; State readers
 
-(def get-predicts (comp (partial into {}) state/get-predicts))
-(def get-log-weight state/get-log-weight)
+(def get-predicts 
+  "retrieves predicts;
+  accepts a state, returns a hash map of predicts"
+  (comp (partial into {}) state/get-predicts))
+
+(def get-log-weight 
+  "retrieves the log weight;
+  accepts a state, returns the log weight"
+  state/get-log-weight)
