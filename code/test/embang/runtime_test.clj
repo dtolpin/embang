@@ -22,6 +22,13 @@
       (is (= (observe dist 0.5) (Math/log 0.))
           "values of wrong type have zero probability"))))
 
+(deftest test-wishart
+  (testing "wishart"
+    (let [dist (wishart 10 [[1 0.5] [0.5 2]])]
+      (is (= (observe dist [[6.5390 5.7249] [5.7249 32.9458]])
+             -9.221021051558678)
+          "log pdf of a sample"))))
+
 (deftest test-CRP
   (testing  "CRP"
     (let [proc (CRP 1.0)]
