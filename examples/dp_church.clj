@@ -73,7 +73,7 @@
                                o))
                     nil '(10 11 12 -100 -150 -200 0.001 0.01 0.005 0))]
 
-  [predict (sample* (apply normal (gaussian-mixture-model-parameters)))])
+  [predict (sample (apply normal (gaussian-mixture-model-parameters)))])
 
 ;; with DPmem implemented using CRP.
 
@@ -88,4 +88,4 @@
                                o))
                     nil '(10 11 12 -100 -150 -200 0.001 0.01 0.005 0))]
 
-  [predict (sample* (apply normal (gaussian-mixture-model-parameters)))])
+  [predict (sample (apply normal (gaussian-mixture-model-parameters)))])

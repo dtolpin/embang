@@ -29,13 +29,3 @@
       (store dist (absorb proc s))
       s)
     (sample dist)))
-
-(defm SAMPLE*
-  "blindly (for LMH) samples from either ERP or XRP"
-  [dist]
-  (if (symbol? dist)
-    (let [proc (retrieve dist)
-          s (sample* (produce proc))]
-      (store dist (absorb proc s))
-      s)
-    (sample* dist)))

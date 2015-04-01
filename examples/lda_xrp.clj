@@ -36,5 +36,5 @@
       (loop [docs (range ndocs)]
         (if (seq docs)
           (let [[doc & docs] docs]
-            (predict doc (SAMPLE* (get-topic-dist doc)))
+            (predict doc (SAMPLE (get-topic-dist doc)))
             (recur docs)))))))
