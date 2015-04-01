@@ -19,10 +19,13 @@
 
 (def +primitive-namespaces+
   "functions in these namespaces are primitive"
-  ;; This list should be extended with care, only for qualified names
-  ;; introduced by the compiler or macros, such as clojure.core-qualified
-  ;; functions in the expansion of quasiquote/unquote.
-  '#{clojure.core})
+  ;; This list should be extended with care, only for qualified
+  ;; names introduced by the compiler or macros, such as
+  ;; clojure.core-qualified functions in the expansion of
+  ;; quasiquote/unquote.
+  '#{clojure.core
+     embang.runtime
+     embang.state})
 
 (declare ^:dynamic *primitive-procedures*)
 

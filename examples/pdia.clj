@@ -43,8 +43,8 @@
                                    (state->observation-model state)))))
           sample-words
           (fn sample-words [state]
-            (when (sample* (flip 0.9))
-              (let [word (sample* (observation-noise state))]
+            (when (embang.runtime/sample (flip 0.9))
+              (let [word (embang.runtime/sample (observation-noise state))]
                 (conj
                   (sample-words (state-symbol->next-state state word))
                   word))))]
