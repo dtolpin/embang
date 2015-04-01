@@ -56,8 +56,7 @@
                                o))
                     nil '(10 11 12 -100 -150 -200 0.001 0.01 0.005 0))]
 
-  ;; sample* is just like sample, but does not create a checkpoint. 
-  [predict (sample* (apply normal (gaussian-mixture-model-parameters)))])
+  [predict (sample (apply normal (gaussian-mixture-model-parameters)))])
 
 ;; The same example, but without re-definition of DPmem. DPmem is defined in a
 ;; separate module, dpmem, and imported in the namespace declaration.
