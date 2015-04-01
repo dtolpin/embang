@@ -34,6 +34,8 @@
   (binding [*gensym* symbol]
     (testing "primitive-procedure?"
       (is (primitive-procedure? 'inc) "inc is primitive")
+      (is (primitive-procedure? 'clojure.core/concat)
+          "functions in clojure.core are primitive")
       (is (not (primitive-procedure? 'fact))
           "fact is not primitive")
       (is (= (cps-of-expression '(fn [dec] dec) 'ret)
