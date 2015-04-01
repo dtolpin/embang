@@ -24,10 +24,15 @@
 
 (deftest test-wishart
   (testing "wishart"
-    (let [dist (wishart 10 [[1 0.5] [0.5 2]])]
-      (is (= (observe dist [[6.5390 5.7249] [5.7249 32.9458]])
-             -9.221021051558678)
-          "log pdf of a sample"))))
+    (let [dist (wishart 10 [[1 0.5] [0.5 2]])
+          round (fn [x] (/ (Math/round (* x 1000.)) 1000.))]
+      (is (= (round (observe (wishart 10 [[1 0.5] [0.5 2]])
+                             [[6.5390 5.7249] [5.7249 32.9458]]))
+             -9.221)
+          "2x2 log pdf")
+      (is (= (round (observe (wishart 5 [[4]]) [[2]]))
+             -4.694)
+          "1x1 log pdf"))))
 
 (deftest test-CRP
   (testing  "CRP"
