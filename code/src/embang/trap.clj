@@ -450,9 +450,9 @@
       (let [[_ kwd & args] expr]
         (case kwd
           :primitive-namespaces (adding-primitive-namespaces args
-                                  (cps-of-do exprs))
+                                  (cps-of-do exprs cont))
           :primitive-procedures (adding-primitive-procedures args
-                                  (cps-of-do exprs))
+                                  (cps-of-do exprs cont))
           (assert false (format "Unknown declaration %s" expr))))
       (cps-of-expression
         expr
