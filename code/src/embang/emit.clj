@@ -97,7 +97,7 @@
 ;; Any non-CPS procedures can be used in the code, but must be
 ;; either declared primitive inside the code or wrapped and
 ;; re-bound. `with-primitive-procedures' is deprecated in favour
-;; of `(declare :primitive ...)', but supported for
+;; of `(declare :primitive-procedures ...)', but supported for
 ;; compatibility.
 
 (defmacro ^:deprecated

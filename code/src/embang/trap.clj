@@ -6,7 +6,7 @@
 
 ;;;; Trampoline-ready Anglican program
 
-;;; Architecture Outline
+;;; Architecture outline
 ;;
 ;; This module defines the transformation of an Anglican program
 ;; into a function in continuation-passing style. The function
@@ -17,17 +17,42 @@
 ;; an object corresponding to either `sample', `observe', or to
 ;; returning the final result.
 
-(def +primitive-namespaces+
+;; Functions are assumed to be in the CPS form. Exceptions
+;; either come from certain namespaces or explicitly defined.
+
+;;; Identifying primitive procedures
+
+(def ^:dynamic *primitive-namespaces*
   "functions in these namespaces are primitive"
-  ;; This list should be extended with care, only for qualified
-  ;; names introduced by the compiler or macros, such as
-  ;; clojure.core-qualified functions in the expansion of
-  ;; quasiquote/unquote.
   '#{clojure.core
      embang.runtime
      embang.state})
 
-(declare ^:dynamic *primitive-procedures*)
+(defmacro adding-primitive-namespaces
+  "includes namespaces into the set of primitive namespaces"
+  [names & body]
+  `(binding [*primitive-namespaces*
+             (reduce conj *primitive-procedures* (flatten ~names))]
+     ~@body))
+
+(def ^:dynamic *primitive-procedures*
+  "primitive procedures, do not exist in CPS form"
+  (let [;; higher-order procedures cannot be primitive
+        exclude '#{loop
+                   map reduce
+                   filter keep keep-indexed remove
+                   repeatedly
+                   every? not-any? some
+                   every-pred some-fn
+                   comp juxt partial}
+        ;; all functions in clojure.core and embang.runtime,
+        ;; except excluded ones, are primitive
+        runtime-namespaces '[clojure.core embang.runtime]]
+    (set (keep (fn [[k v]]
+                 (when (and (not (exclude k))
+                            (fn? (var-get v)))
+                   k))
+               (mapcat ns-publics runtime-namespaces)))))
 
 (defmacro adding-primitive-procedures
   "includes names into the set of primitive procedures"
@@ -98,7 +123,7 @@
       ;; or qualified names from primitive namespaces.
       (and 
         (namespace procedure)
-        (+primitive-namespaces+ (symbol (namespace procedure)))
+        (*primitive-namespaces* (symbol (namespace procedure)))
         (fn? (deref (resolve procedure)))))))
 
 (defn primitive-operator?
@@ -411,6 +436,12 @@
         (cps-of-expression cnd cont)))
     (cps-of-expression false cont)))
 
+;; Declarations may be specified anywhere in a form sequence.
+;; A declaration has the syntax:
+;;   (declare keyword arg ...)
+;; Normally, `keyword' identifies the declared property of
+;; `arg ...'.
+
 (defn cps-of-do
   "transforms do to CPS"
   [exprs cont]
@@ -418,8 +449,10 @@
     (if (declaration? expr)
       (let [[_ kwd & args] expr]
         (case kwd
-          :primitive (adding-primitive-procedures args
-                       (cps-of-do exprs cont))
+          :primitive-namespaces (adding-primitive-namespaces args
+                                  (cps-of-do exprs))
+          :primitive-procedures (adding-primitive-procedures args
+                                  (cps-of-do exprs))
           (assert false (format "Unknown declaration %s" expr))))
       (cps-of-expression
         expr
@@ -606,22 +639,3 @@
                      ;; application
                      (cps-of-application expr cont)))
     :else (assert false (format "Cannot transform %s to CPS" expr))))
-
-(def ^:dynamic *primitive-procedures*
-  "primitive procedures, do not exist in CPS form"
-  (let [;; higher-order procedures cannot be primitive
-        exclude '#{loop
-                   map reduce
-                   filter keep keep-indexed remove
-                   repeatedly
-                   every? not-any? some
-                   every-pred some-fn
-                   comp juxt partial}
-        ;; all functions in clojure.core and embang.runtime,
-        ;; except excluded ones, are primitive
-        runtime-namespaces '[clojure.core embang.runtime]]
-    (set (keep (fn [[k v]]
-                 (when (and (not (exclude k))
-                            (fn? (var-get v)))
-                   k))
-               (mapcat ns-publics runtime-namespaces)))))
