@@ -49,7 +49,7 @@
   "computes (log (+ (exp x) (exp y))) safely"
   [log-x log-y]
   (let [log-max (max log-x log-y)]
-    (if (< (/ -1. 0.) log-max (/ 1. 0.))
+    (if (< (/ -1. 0.) log-max)
       (+ log-max
          (Math/log (+ (Math/exp (- log-x log-max))
                       (Math/exp (- log-y log-max)))))

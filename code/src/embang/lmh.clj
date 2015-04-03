@@ -72,7 +72,7 @@
         log-p (try (observe (:dist smp) value)
                    ;; NaN is returned if value is not in support.
                    (catch Exception e (/ 0. 0.)))
-        value (if (< (/ -1. 0.) log-p (/ 1. 0.)) value
+        value (if (< (/ -1. 0.) log-p) value
                 ;; The retained value is not in support, resample
                 ;; the value from the prior.  When the value is
                 ;; resampled, log-p is no longer valid, but log-p

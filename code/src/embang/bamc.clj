@@ -221,7 +221,7 @@
   "back propagate reward to bandits"
   [state]
   (let [reward (get-log-weight state)]
-    (if (< (/ -1. 0.) reward (/ 1. 0.))
+    (if (< (/ -1. 0.) reward)
 
       ;; Detach the trace and the bandits from the existing
       ;; states, update the bandits and reattach them to
