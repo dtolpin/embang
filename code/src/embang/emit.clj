@@ -5,7 +5,7 @@
   (:use [embang.trap :only [*gensym*
                             shading-primitive-procedures
                             cps-of-expression result-cont 
-                            fn-cps primitive-procedure-cps]])
+                            fn-cps mem-cps primitive-procedure-cps]])
 
   ;; Pre- and post-processing
   (:require [embang.pre :as pre]
@@ -93,6 +93,20 @@
               :arglists `'([~'$cont ~'$state
                             ~@(first source)])})
        (fm ~name ~@source))))
+
+;; In m!, memoized computations, which can be impure, are
+;; created by `mem'. Inside a CPS expression, `mem' is
+;; intrepreted as a special form. In a Clojure context, the macro
+;; `mem' replicates the functionality of `mem' in m!.
+
+(defmacro mem
+  "creates a memoized computation in CPS form"
+  [& args]
+  (overriding-higher-order-functions
+    (-> `(mem ~@args)
+        pre/process
+        rest mem-cps
+        post/process)))
 
 ;; Any non-CPS procedures can be used in the code, but must be
 ;; either declared primitive inside the code or wrapped and
