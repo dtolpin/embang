@@ -131,7 +131,7 @@
         (let [last-predicts (update-in last-predicts [label]
                                        add-pending-choice choice-id)]
           (if (= value (:value (last-predicts label)))
-            ;; Same predict, penalize pendings choices.
+            ;; Same predict, penalize pending choices.
             (recur
               predicts
               (update-rewards

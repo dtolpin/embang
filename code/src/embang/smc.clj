@@ -67,8 +67,8 @@
     [(map (fn [log-weight]
             ;; Avoid NaN and Infinity.
             (cond
-              (= log-weight max-log-weight) 1. ; all are -Infinity
-              (not (> log-weight (/ -1. 0.))) 0. ; NaN or -Infinity
+              (= log-weight max-log-weight) 1. ; all are -Infinity?
+              (not (< (/ -1. 0.) log-weight)) 0. ; NaN or -Infinity
               :else (Math/exp (- log-weight max-log-weight))))
           log-weights)
      max-log-weight]))
@@ -85,11 +85,11 @@
         step (/ total-weight (double number-of-new-particles))
 
         ;; After resampling, all particles have the same weight.
-        log-weight (if (< (/ -1. 0.) max-log-weight (/ 1. 0))
+        log-weight (if (< (/ -1. 0) max-log-weight)
                      (+ (Math/log step) max-log-weight)
-                     ;; If the weight is not usable, set it
-                     ;; to -Infinity so that the sweep dies out
-                     ;; if possible.
+                     ;; If any weight is NaN, set the weight
+                     ;; after resampling to -Infinity so that
+                     ;; the sweep dies out if possible.
                      (/ -1. 0.))
 
         ;; Particle sequence is circular.

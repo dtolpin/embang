@@ -1,5 +1,5 @@
 (ns embang.plmh
-  "Parallel Lighweight Metropolis-Hastings
+  "Parallel Lightweight Metropolis-Hastings
    Options:
      :number-of-threads (2 by default) 
        - number of threads to use"
