@@ -42,7 +42,7 @@
 (defrecord entry [choice-id value cont])
 
 (defn choice-id
-  "returns a unique idenditifer for sample checkpoint
+  "returns a unique identifier for sample checkpoint
   and the updated state"
   [smp state]
   (checkpoint-id smp state ::choice-counts ::choice-last-id))
