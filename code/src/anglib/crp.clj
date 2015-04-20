@@ -7,19 +7,19 @@
 
 ;; Stateful Chinese restaurant process, draws an index.
 
-(defun crp (alpha)
-  (let ((name (gensym "crp")))
-    (lambda ()
-      (let ((p (or (retrieve name) (CRP alpha)))
-            (s (sample (produce p))))
+(defm crp [alpha]
+  (let [name (gensym "crp")]
+    (fn []
+      (let [p (or (retrieve name) (CRP alpha))
+            s (sample (produce p))]
         (store name (absorb p s))
         s))))
 
 ;; DPmem, memoizes calls to h softly.
 ;; h may get an arbitrary number of arguments.
 
-(defun DPmem (alpha h)
-  (let ((C (crp alpha))
-        (f (mem (lambda (s args) (apply h args)))))
-    (lambda args
+(defm DPmem [alpha h]
+  (let [C (crp alpha)
+        f (mem (fn [s args] (apply h args)))]
+    (fn [& args]
       (f (C) args))))

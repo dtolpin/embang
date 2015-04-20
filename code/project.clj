@@ -1,4 +1,4 @@
-(defproject embang "0.6.2-SNAPSHOT"
+(defproject embang "1.0.0-SNAPSHOT"
   :description "Anglican, a probabilistic programming system"
   :url "http://bitbucket.org/dtolpin/embang"
   :license {:name "GNU General Public License Version 3"
@@ -10,7 +10,8 @@
                  [colt "1.2.0"]
                  [net.mikera/core.matrix "0.33.2"]
                  [net.mikera/vectorz-clj "0.29.0"]]
-  :plugins [[codox "0.8.11"]]
+  :plugins [[codox "0.8.11"]
+            [lein-gorilla "0.3.4"]]
   :scm {:name "git"
         :url "https://bitbucket.org/dtolpin/embang"}
   :repl-options {:timeout 600000}
@@ -21,5 +22,5 @@
   :java-source-paths ["src"]
   :resource-paths ["../examples"]
   :profiles {:uberjar {:aot :all}}
-  :deploy-branches ["master"]
+  :deploy-branches ["master" "optimize"]
   :aliases {"publish" ["do" ["clean"] ["test"] ["uberjar"]]})

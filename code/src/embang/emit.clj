@@ -1,10 +1,15 @@
 (ns embang.emit
   "Top-level forms for Anglican programs"
-  (:use [embang.xlat :only [program alambda]])
+
+  ;; Essential CPS transformation calls
   (:use [embang.trap :only [*gensym*
                             shading-primitive-procedures
                             cps-of-expression result-cont 
-                            fn-cps primitive-procedure-cps]]))
+                            fn-cps mem-cps primitive-procedure-cps]])
+
+  ;; Pre- and post-processing
+  (:require [embang.pre :as pre]
+            [embang.post :as post]))
 
 ;;;; Top-level forms for Anglican programs
 
@@ -44,7 +49,10 @@
     (overriding-higher-order-functions
       (shading-primitive-procedures (if (vector? value) value [value])
         `(~'fn ~(*gensym* "query") [~value ~'$state]
-           ~(cps-of-expression `(~'do ~@source) result-cont))))))
+           ~(-> `(~'do ~@source)
+                pre/process
+                (cps-of-expression result-cont)
+                post/process))))))
 
 (defmacro defquery
   "binds variable to m! program"
@@ -55,33 +63,6 @@
           [(format "m! program '%s'" name) args])]
     `(def ~(with-meta name {:doc docstring})
        (query ~@source))))
-
-;; The original Scheme-like syntax is now deprecated, but
-;; supported for compatibility with older programs.  Programs
-;; written in the legacy syntax are defined using `anglican' and
-;; bound to a name using `defanglican'.
-
-(defmacro ^:deprecated anglican 
-  "macro for embedding anglican programs"
-  [& args]
-  (let [[value source]
-        (if (symbol? (first args)) ; named argument?
-          [(first args) (rest args)]
-          ['$value args])]
-    (overriding-higher-order-functions
-      (shading-primitive-procedures [value]
-        `(~'fn ~(*gensym* "anglican") [~value ~'$state]
-           ~(cps-of-expression (program source) result-cont))))))
-
-(defmacro ^:deprecated defanglican
-  "binds variable to anglican program"
-  [name & args]
-  (let [[docstring source]
-        (if (string? (first args))
-          [(first args) (rest args)]
-          [(format "anglican program '%s'" name) args])]
-    `(def ~(with-meta name {:doc docstring})
-       (anglican ~@source))))
 
 ;;; Auxiliary macros
 
@@ -94,7 +75,10 @@
   useful for defining functions outside of defanglican"
   [& args]
   (overriding-higher-order-functions
-    (fn-cps args)))
+    (-> `(fn ~@args)
+        pre/process
+        rest fn-cps
+        post/process)))
 
 (defmacro defm
   "binds variable to function in CPS form"
@@ -110,37 +94,26 @@
                             ~@(first source)])})
        (fm ~name ~@source))))
 
-;; The legacy names for fm and defm are cps-fn and def-cps-fn.
-;; These names are deprecated but preserved for compatibility.
+;; In m!, memoized computations, which can be impure, are
+;; created by `mem'. Inside a CPS expression, `mem' is
+;; intrepreted as a special form. In a Clojure context, the macro
+;; `mem' replicates the functionality of `mem' in m!.
 
-(defmacro ^:deprecated cps-fn
-  "legacy name for fm"
+(defmacro mem
+  "creates a memoized computation in CPS form"
   [& args]
-  `(fm ~@args))
+  (overriding-higher-order-functions
+    (-> `(mem ~@args)
+        pre/process
+        rest mem-cps
+        post/process)))
 
-(defmacro ^:deprecated def-cps-fn
-  "legacy name for defm"
-  [& args]
-  `(defm ~@args))
+;; Any non-CPS procedures can be used in the code, but must be
+;; either declared primitive inside the code or wrapped and
+;; re-bound. `with-primitive-procedures' is deprecated in favour
+;; of `(declare :primitive ...)', but supported for compatibility.
 
-;; Functions can also be defined in Scheme-like rather
-;; than Clojure syntax. Again, this syntax is deprecated
-;; but preserved for compatibility.
-
-(defmacro ^:deprecated lambda
-  "defines function in Anglican syntax"
-  [& args]
-  `(fm ~@(next (alambda nil args))))
-
-(defmacro ^:deprecated defun
-  "binds variable to function in Anglican syntax"
-  [name & args]
-  `(defm ~@(next (alambda name args))))
-
-;; Any non-CPS procedures can be used in the code,
-;; but must be wrapped and re-bound.
-
-(defmacro
+(defmacro ^:deprecated
   with-primitive-procedures
   "binds primitive procedure names to their CPS versions;
   if procedure name is qualified, it becomes unqualified in

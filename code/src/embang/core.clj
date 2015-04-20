@@ -8,6 +8,8 @@
   (:use [embang.inference :only [warmup infer print-predicts]])
   (:use [embang.results :only [redir freqs meansd diff]]))
 
+;;; Auto-loading of algorithms and programs
+
 (defn load-algorithm
   "loads algorithm by requiring the namespace"
   [algorithm]
@@ -28,6 +30,12 @@
   (var-get (or (ns-resolve (symbol nsname) (symbol progname))
                (throw (Exception. (format "no such program: %s/%s"
                                           nsname progname))))))
+
+;;; Command-line interaction
+;;
+;; Both in the REPL and on the command line, Unix style command
+;; line syntax is provided. The inference output is stored in
+;; files for either interactive or batch processing.
 
 (def cli-options
   [["-a" "--inference-algorithm NAME" "Inference algorithm"
@@ -190,6 +198,9 @@ Options:
                 (when (:debug options)
                   (.printStackTrace e))))))))))
 
+;; `m!' is used in the REPL, `-main' is invoked from the command
+;; line by default. Both functions call `main' to do the work.
+
 (defmacro m!
   "invoking main from the REPL"
   [& args]
@@ -200,3 +211,33 @@ Options:
   [& args]
   (apply main args)
   (shutdown-agents))
+
+;; Rich REPL
+;;
+;; In an alternative paradigm of interaction results are
+;; manipulated in the REPL (Leiningen, Gorilla). `doquery'
+;; accepts the query as a callable object and returns a
+;; lazy sequence of states.
+
+(defn doquery
+  "performs inference query;
+  returns lazy sequence of states"
+  [algorithm query value & options]
+  (do
+    ;; Use the auto-loading machinery in embang.core to load
+    ;; the inference algorithm on demand.
+    (load-algorithm algorithm)
+    (let [options* (apply hash-map options)]
+      (try
+        ;; Optionally, warm up the query by pre-evaluating
+        ;; the determenistic prefix.
+        (let [[query value] (if (:warmup options* true)
+                                [(warmup query value) nil]
+                                [query value])]
+          ;; Finally, call the inference to create
+          ;; a lazy sequence of states.
+          (apply infer algorithm query value options))
+        (catch Exception e
+          (when (:debug options*)
+            (.printStackTrace e *out*))
+          (throw e))))))

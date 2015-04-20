@@ -20,7 +20,7 @@
         ;; from the previous particle.
         {::trace []               ; current random choices
          ::rdb {}                 ; stored random choices
-         ::choice-counts {}       ; counts of occurences of each `sample'
+         ::choice-counts {}       ; counts of occurrences of each `sample'
          ::choice-last-id nil}))  ; last sample id
 
 ;;; Trace
@@ -40,7 +40,7 @@
 (defrecord entry [choice-id value log-p cont])
 
 (defn choice-id
-  "returns a unique idenditifer for sample checkpoint
+  "returns a unique identifier for sample checkpoint
   and the updated state"
   [smp state]
   (checkpoint-id smp state ::choice-counts ::choice-last-id))
@@ -72,7 +72,7 @@
         log-p (try (observe (:dist smp) value)
                    ;; NaN is returned if value is not in support.
                    (catch Exception e (/ 0. 0.)))
-        value (if (< (/ -1. 0.) log-p (/ 1. 0.)) value
+        value (if (< (/ -1. 0.) log-p) value
                 ;; The retained value is not in support, resample
                 ;; the value from the prior.  When the value is
                 ;; resampled, log-p is no longer valid, but log-p

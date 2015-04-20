@@ -22,6 +22,18 @@
       (is (= (observe dist 0.5) (Math/log 0.))
           "values of wrong type have zero probability"))))
 
+(deftest test-wishart
+  (testing "wishart"
+    (let [dist (wishart 10 [[1 0.5] [0.5 2]])
+          round (fn [x] (/ (Math/round (* x 1000.)) 1000.))]
+      (is (= (round (observe (wishart 10 [[1 0.5] [0.5 2]])
+                             [[6.5390 5.7249] [5.7249 32.9458]]))
+             -9.221)
+          "2x2 log pdf")
+      (is (= (round (observe (wishart 5 [[4]]) [[2]]))
+             -4.694)
+          "1x1 log pdf"))))
+
 (deftest test-CRP
   (testing  "CRP"
     (let [proc (CRP 1.0)]

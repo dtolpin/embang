@@ -34,6 +34,8 @@
   (binding [*gensym* symbol]
     (testing "primitive-procedure?"
       (is (primitive-procedure? 'inc) "inc is primitive")
+      (is (primitive-procedure? 'clojure.core/concat)
+          "functions in clojure.core are primitive")
       (is (not (primitive-procedure? 'fact))
           "fact is not primitive")
       (is (= (cps-of-expression '(fn [dec] dec) 'ret)
@@ -198,9 +200,25 @@
       (is (= (cps-of-apply '(+ terms) 'ret)
              '(fn [] (ret (clojure.core/apply + terms) $state)))
           "simple apply")
+      (is (= (cps-of-apply '(:foo terms) 'ret)
+             '(fn [] (ret (clojure.core/apply :foo terms) $state)))
+          "keyword apply")
       (is (= (cps-of-apply '(foo xs) 'ret)
              '(clojure.core/apply foo ret $state xs))
           "compound apply"))))
+
+(deftest test-cps-of-application
+  (binding [*gensym* symbol]
+    (testing "cps-of-application"
+      (is (= (cps-of-application '(+ x y) 'ret)
+             '(fn [] (ret (+ x y) $state)))
+          "simple application")
+      (is (= (cps-of-application '(:foo x) 'ret)
+             '(fn [] (ret (:foo x) $state)))
+          "keyword application")
+      (is (= (cps-of-application '(foo x y) 'ret)
+             '(foo ret $state x y))
+          "compound application"))))
 
 (deftest test-cps-of-predict
   (binding [*gensym* symbol]

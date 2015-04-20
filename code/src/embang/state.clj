@@ -23,28 +23,28 @@
   (assoc state ::log-weight log-weight))
 
 (defn add-log-weight
-  "add log-weight to the accumulated log-weight
+  "adds log-weight to the accumulated log-weight
   in the state"
   [state log-weight]
   (update-in state [::log-weight] + log-weight))
 
 (defn get-log-weight
-  "get accumulated log-weight"
+  "returns accumulated log-weight"
   [state]
   (state ::log-weight))
 
 (defn add-predict
-  "add predict label and value to the list of predicts"
+  "adds predict label and value to the list of predicts"
   [state label value] ; on predict
   (update-in state [::predicts] conj [label value]))
 
 (defn get-predicts
-  "get collected predicts"
+  "returns collected predicts as an array map"
   [state]
-  (state ::predicts))
+  (reduce conj (array-map) (reverse (state ::predicts))))
 
 (defn clear-predicts
-  "clear predicts"
+  "clears predicts"
   [state]
   (update-in state [::predicts] empty))
 

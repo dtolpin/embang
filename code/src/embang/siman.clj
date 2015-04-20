@@ -42,7 +42,7 @@
 (defrecord entry [choice-id value cont])
 
 (defn choice-id
-  "returns a unique idenditifer for sample checkpoint
+  "returns a unique identifier for sample checkpoint
   and the updated state"
   [smp state]
   (checkpoint-id smp state ::choice-counts ::choice-last-id))
@@ -75,7 +75,7 @@
                 (observe (:dist smp) value)
                 ;; NaN is returned if value is not in support.
                 (catch Exception e (/ 0. 0.)))
-        value (if (< (/ -1. 0.) log-p (/ 1. 0.)) value
+        value (if (< (/ -1. 0.) log-p) value
                 ;; The retained value is not in support,
                 ;; resample the value from the prior.
                 (sample (:dist smp)))
@@ -190,4 +190,4 @@
           sample-seq (if number-of-samples
                        (take number-of-samples sample-seq)
                        sample-seq)]
-      (map-seq sample-seq (Math/log 0.)))))
+      (map-seq sample-seq (/ -1. 0.)))))

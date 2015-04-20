@@ -60,6 +60,6 @@
         ;; predict topics
         (reduce
           (fn [_ doc]
-            (predict doc (sample*
+            (predict doc (embang.runtime/sample
                            (produce (get topic-dists doc)))))
           () (range ndocs))))))

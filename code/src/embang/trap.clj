@@ -1,24 +1,65 @@
 (ns embang.trap
   "CPS transformation of Anglican program"
-  (:require embang.runtime)
-  (:use embang.state))
+  (:require embang.runtime) ; for primitive procedure names
+  (:use embang.ast
+        embang.state))
 
 ;;;; Trampoline-ready Anglican program
 
-;; The input to this transformations is an Anglican program in
-;; clojure syntax (embang.xlat). The output is a Clojure function
-;; that returns either the next step as a structure incroprorating
-;; continuations and parameters, or the state containing a vector of
-;; predicted values and the sample weight.
+;;; Architecture outline
 ;;
-;; Steps are delimited by random choices.  Between the steps, the
-;; inference decisions can be made.
+;; This module defines the transformation of an Anglican program
+;; into a function in continuation-passing style. The function
+;; itself is the initial continuation.
 ;;
-;; The state is threaded through computation and consists of
-;;   - the running sample weight
-;;   - the list of predicted values.
+;; Any continuation receives a value and a state, and returns
+;; either a thunk (an argumentless function) or a checkpoint ---
+;; an object corresponding to either `sample', `observe', or to
+;; returning the final result.
 
-(declare ^:dynamic *primitive-procedures*)
+;; Functions are assumed to be in the CPS form. Exceptions
+;; either come from certain namespaces or explicitly defined.
+
+;;; Identifying primitive procedures
+
+(def ^:dynamic *primitive-namespaces*
+  "functions in these namespaces are primitive"
+  '#{clojure.core
+     embang.runtime
+     embang.state})
+
+(defmacro adding-primitive-namespaces
+  "includes namespaces into the set of primitive namespaces"
+  [names & body]
+  `(binding [*primitive-namespaces*
+             (reduce conj *primitive-procedures* (flatten ~names))]
+     ~@body))
+
+(def ^:dynamic *primitive-procedures*
+  "primitive procedures, do not exist in CPS form"
+  (let [;; higher-order procedures cannot be primitive
+        exclude '#{loop
+                   map reduce
+                   filter keep keep-indexed remove
+                   repeatedly
+                   every? not-any? some
+                   every-pred some-fn
+                   comp juxt partial}
+        ;; all functions in clojure.core and embang.runtime,
+        ;; except excluded ones, are primitive
+        runtime-namespaces '[clojure.core embang.runtime]]
+    (set (keep (fn [[k v]]
+                 (when (and (not (exclude k))
+                            (fn? (var-get v)))
+                   k))
+               (mapcat ns-publics runtime-namespaces)))))
+
+(defmacro adding-primitive-procedures
+  "includes names into the set of primitive procedures"
+  [names & body]
+  `(binding [*primitive-procedures*
+             (reduce conj *primitive-procedures* (flatten ~names))]
+     ~@body))
 
 (defmacro shading-primitive-procedures
   "excludes names from the set of primitive procedures"
@@ -34,33 +75,56 @@
 (defn value-cont "returns value" [v _] v)
 (defn state-cont "returns state" [_ s] s)
 
-;; Interrupt points
+;; Checkpoints
+;;
+;; Checkpoints corresponding to `sample' and `observe' include a
+;; continuation. This continuation must be called to continue
+;; the execution after the inference algorithm processed the
+;; checkpoint. The `result' checkpoint does not have a
+;; continuation. 
 
 (defrecord observe [id dist value cont state])
 (defrecord sample [id dist cont state])
 (defrecord result [state])
 
-;; Retrieval of final result
+;; Retrieval of the final result
 
 (defn result-cont [v s] (->result s))
 
-;; When a continuation is called, it is trampolined,
-;; that is, wrapped in a thunk. This collapses the stack
+;; When a continuation is called, it is wrapped in a thunk ---
+;; an argumentless function. This collapses the stack
 ;; and ensures that recursion of any depth does not cause
-;; stack overflow.
+;; stack overflow. Thunks should be used in conjunction with
+;; Clojure `trampoline'.
 
 (defn continue
   "returns a trampolined call to continuation"
   [cont value state]
-  `(~'fn [] (~cont ~value ~state)))
+  (with-meta
+    `(~'fn [] (~cont ~value ~state))
+    {::continuation true}))
 
 ;;; Expression predicates
+
+(defn declaration?
+  "true if the form is a declaration"
+  [form]
+  (and (seq? form) (= 'declare (first form))))
 
 (defn primitive-procedure?
   "true if the procedure is primitive,
   that is, does not have a CPS form"
   [procedure]
-  (*primitive-procedures* procedure))
+  (and 
+    (symbol? procedure)
+    (or 
+      ;; Accept either unqualified names for every procedure,
+      (*primitive-procedures* procedure)
+      ;; or qualified names from primitive namespaces.
+      (and 
+        (namespace procedure)
+        (*primitive-namespaces* (symbol (namespace procedure)))
+        (fn? (deref (resolve procedure)))))))
 
 (defn primitive-operator?
   "true if the experssion is converted by clojure 
@@ -72,7 +136,7 @@
 (defn fn-form?
   "true when the argument is a fn form"
   [expr]
-  (and (seq? expr) (= (first expr) 'fn)))
+  (and (seq? expr) ('#{fn fn*} (first expr))))
 
 (defn mem-form?
   "true when the argument is a mem form"
@@ -128,8 +192,8 @@
       (fn-form? expr)
       (mem-form? expr)))
  
-;; Simple expressions, primitive procedure wrappers
-;; and fn forms are opaque.
+;; Simple expressions, primitive procedure wrappers,
+;; as well as fn and mem forms are opaque.
 
 (declare primitive-procedure-cps fn-cps mem-cps)
 (defn opaque-cps
@@ -149,7 +213,7 @@
 
 (def ^:dynamic *gensym* 
   "customized gensym for code generation,
-  bound to `symbol' in tests"
+  bound to 'symbol' in tests"
   gensym)
 
 ;;; Literal data structures --- vectors, maps and sets.
@@ -186,14 +250,12 @@
 (defn fn-cps
   "transforms function definition to CPS form"
   [args]
-  (if (vector? (first args))
-    (fn-cps `[nil ~@args])
-    (let [[name parms & body] args
-          cont (*gensym* "C")]
-      (shading-primitive-procedures parms
-        `(~'fn ~(or name (*gensym* "fn"))
-           [~cont ~'$state ~@parms]
-           ~(cps-of-do body cont))))))
+  (let [[name parms & body] (fn-args args)
+        cont (*gensym* "C")]
+    (shading-primitive-procedures parms
+      `(~'fn ~(or name (*gensym* "fn"))
+         [~cont ~'$state ~@parms]
+         ~(cps-of-do body cont)))))
 
 (defn mem-cps
   "transforms mem to CPS"
@@ -205,8 +267,7 @@
 
         ;; If the argument of mem is a named lambda,
         ;; move the name to outer function.
-        [name expr] (if (and (seq? arg)
-                             (= (first arg) 'fn)
+        [name expr] (if (and (fn-form? arg)
                              (symbol? (second arg)))
                       [(second arg) `(~'fn ~@(nnext arg))]
                       [nil arg])]
@@ -285,10 +346,7 @@
   cps-of-if
   "transforms if to CPS"
   [args cont]
-  (let [[cnd thn els & rst] args]
-    (assert (empty? rst)
-            (format "Invalid number of args (%d) passed to if"
-                    (count args)))
+  (let [[cnd thn els & rst] (if-args args)]
     (if (opaque? cnd)
       `(~'if ~(opaque-cps cnd)
          ~(cps-of-expression thn cont)
@@ -297,9 +355,8 @@
         cnd
         (let [cnd (*gensym* "I")]
           `(~'fn ~(*gensym* "if") [~cnd ~'$state]
-             (~'if ~cnd
-               ~(cps-of-expression thn cont)
-               ~(cps-of-expression els cont))))))))
+             ;; Call `cps-of-expression' to detect simple `if'.
+             ~(cps-of-expression `(~'if ~cnd ~thn ~els) cont)))))))
 
 ;; `when' is translated into `if'.
 
@@ -325,24 +382,29 @@
   (let [[key & clauses] args]
     (if (opaque? key)
       `(~'case ~(opaque-cps key)
-         ~@(mapcat (fn [clause]
-                     (if (= (count clause) 2)
-                       (let [[tag expr] clause]
-                         [tag (cps-of-expression expr cont)])
-                       ;; The last clause is the default clause.
-                       (let [[expr] clause]
-                         [(cps-of-expression expr cont)])))
-                   ;; This magic call to `partition' breaks clauses
-                   ;; into two-element tuples, with the last tuple
-                   ;; containing a single element if the number of
-                   ;; clauses is odd (default clause is specified).
-                   (partition 2 2 nil clauses)))
+         ~@(apply
+             concat
+             (loop [clauses clauses
+                    cps-clauses []]
+               (if (seq clauses)
+                 (if (rest clauses)
+                   ;; Normal clause.
+                   (let [[tag expr & clauses] clauses]
+                     (recur
+                       clauses
+                       (conj cps-clauses 
+                             [tag (cps-of-expression expr cont)])))
+                   ;; Default clause.
+                   (let [[expr] clauses]
+                     (conj cps-clauses
+                           [(cps-of-expression expr cont)])))
+                 cps-clauses))))
       (cps-of-expression
         key
         (let [key (*gensym* "K")]
           `(~'fn ~(*gensym* "case") [~key ~'$state]
-             ~(cps-of-expression
-                `(~'case ~key ~@clauses) cont)))))))
+             ;; Call `cps-of-expression' to detect simple `case'.
+             ~(cps-of-expression `(~'case ~key ~@clauses) cont)))))))
 
 (defn-with-named-cont
   cps-of-and
@@ -374,22 +436,36 @@
         (cps-of-expression cnd cont)))
     (cps-of-expression false cont)))
 
+;; Declarations may be specified anywhere in a form sequence.
+;; A declaration has the syntax:
+;;   (declare keyword arg ...)
+;; Normally, `keyword' identifies the declared property of
+;; `arg ...'.
+
 (defn cps-of-do
   "transforms do to CPS"
   [exprs cont]
-  (let [[fst & rst] exprs]
-    (cps-of-expression
-      fst
-      (if (seq rst)
-        `(~'fn ~(*gensym* "do") [~'_ ~'$state]
-           ~(cps-of-do rst cont))
-        cont))))
+  (let [[expr & exprs] exprs]
+    (if (declaration? expr)
+      (let [[_ kwd & args] expr]
+        (case kwd
+          :ns-primitive (adding-primitive-namespaces args
+                          (cps-of-do exprs cont))
+          :primitive (adding-primitive-procedures args
+                       (cps-of-do exprs cont))
+          (assert false (format "Unknown declaration %s" expr))))
+      (cps-of-expression
+        expr
+        (if (seq exprs)
+          `(~'fn ~(*gensym* "do") [~'_ ~'$state]
+             ~(cps-of-do exprs cont))
+          cont)))))
 
 ;;; Applications and applicative forms
 
 (defn make-of-args
   "builds lexical bindings for all compound args
-  and then calls `make' to build expression
+  and then calls 'make' to build expression
   out of the args; used by predict, observe, sample, application"
   ([args make] (make-of-args args false make))
   ([args first-is-rator make]
@@ -435,7 +511,7 @@
                               `(add-predict ~'$state
                                             ~label ~value))))))
 
-;; `observe' and `select' may accept an optional argument at
+;; `observe' and `sample' may accept an optional argument at
 ;; the first position. If the argument is specified, then
 ;; the value is the identifier of the checkpoint; otherwise,
 ;; the identifier is a statically generated symbol.
@@ -497,7 +573,10 @@
                 (fn [acall]
                   (let [[rator & rands] acall]
                     (if (primitive-operator? rator)
-                      (continue cont `(apply ~@acall) '$state)
+                      (continue cont 
+                                (with-meta
+                                  `(apply ~@acall) {::primitive true})
+                                '$state)
                       `(apply ~rator
                               ~cont ~'$state ~@rands))))))
 
@@ -510,7 +589,9 @@
                 (fn [call]
                   (let [[rator & rands] call]
                     (if (primitive-operator? rator)
-                      (continue cont call '$state)
+                      (continue cont 
+                                (with-meta call {:primitive true})
+                                '$state)
                       `(~rator ~cont ~'$state ~@rands))))))
 
 ;;; Primitive procedures in value postition
@@ -550,25 +631,11 @@
                      sample    (cps-of-sample args cont)
                      store     (cps-of-store args cont)
                      retrieve  (cps-of-retrieve args cont)
-                     apply     (cps-of-apply args cont)
+                     ;; Intercept clojure.core/apply to handle
+                     ;; the code generated by quasiquote and
+                     ;; unquote.
+                     (apply clojure.core/apply)
+                               (cps-of-apply args cont)
                      ;; application
-                               (cps-of-application expr cont)))
-    :else (assert false (str "Cannot transform " expr " to CPS"))))
-
-(def ^:dynamic *primitive-procedures*
-  "primitive procedures, do not exist in CPS form"
-  (let [;; higher-order procedures cannot be primitive
-        exclude '#{loop
-                   map reduce
-                   filter keep keep-indexed remove
-                   repeatedly
-                   every? not-any? some
-                   every-pred some-fn
-                   comp juxt partial}
-        ;; runtime namespaces
-        runtime-namespaces '[clojure.core embang.runtime]]
-    (set (keep (fn [[k v]]
-                 (when (and (not (exclude k))
-                            (fn? (var-get v)))
-                   k))
-               (mapcat ns-publics runtime-namespaces)))))
+                     (cps-of-application expr cont)))
+    :else (assert false (format "Cannot transform %s to CPS" expr))))

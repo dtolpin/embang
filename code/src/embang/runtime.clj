@@ -39,13 +39,7 @@
   (sample [this]
     "draws a sample from the distribution")
   (observe [this value]
-    "return the probability [density] of the value"))
-
-;; `sample' is both a protocol method and a special form in
-;; Anglican. To generate random values without exposing the random
-;; choice as a checkpoint, use `sample*'.
-
-(def sample* "draws a sample from the distribution" sample)
+    "return the log probability of the value"))
 
 ;; Log probabilities are used pervasively. A precision-preserving
 ;; way to add probabilities (e.g. for computing union probability)
@@ -55,7 +49,7 @@
   "computes (log (+ (exp x) (exp y))) safely"
   [log-x log-y]
   (let [log-max (max log-x log-y)]
-    (if (< (/ -1. 0.) log-max (/ 1. 0.))
+    (if (< (/ -1. 0.) log-max)
       (+ log-max
          (Math/log (+ (Math/exp (- log-x log-max))
                       (Math/exp (- log-y log-max)))))
@@ -81,27 +75,31 @@
 (defmacro defdist
   "defines distribution"
   [name & args]
-  (let [[docstring parameters bindings & methods]
+  (let [[docstring parameters & args]
         (if (string? (first args))
           args
-          `(~(format "%s distribution" name) ~@args))]
-    (let [record-name (symbol (format "%s-distribution" name))
-          variables (take-nth 2 bindings)]
-      `(do
-         (declare ~name)
-         (defrecord ~record-name [~@parameters ~@variables]
-           Object
-           (toString [~'this]
-             (str (list '~(qualify name) ~@parameters)))
-           distribution
-           ~@methods)
-         (defn ~name ~docstring ~parameters
-           (let ~bindings
-             (~(symbol (format "->%s" record-name))
-                       ~@parameters ~@variables)))
-         (defmethod print-method ~record-name 
-           [~'o ~'m]
-           (print-simple (str ~'o) ~'m))))))
+          `(~(format "%s distribution" name) ~@args))
+        [bindings & methods]
+        (if (vector? (first args))
+          args
+          `[[] ~@args])
+        record-name (symbol (format "%s-distribution" name))
+        variables (take-nth 2 bindings)]
+    `(do
+       (declare ~name)
+       (defrecord ~record-name [~@parameters ~@variables]
+         Object
+         (toString [~'this]
+           (str (list '~(qualify name) ~@parameters)))
+         distribution
+         ~@methods)
+       (defn ~name ~docstring ~parameters
+         (let ~bindings
+           (~(symbol (format "->%s" record-name))
+                     ~@parameters ~@variables)))
+       (defmethod print-method ~record-name 
+         [~'o ~'m]
+         (print-simple (str ~'o) ~'m)))))
 
 ;; Many distributions are available in the Colt library and
 ;; imported automatically.
@@ -226,7 +224,7 @@
 
 (defdist mvn
   "multivariate normal"
-  [mean cov] [k (count mean)     ; number of dimensions
+  [mean cov] [k (m/ecount mean)     ; number of dimensions
               Lcov (:L (ml/cholesky (m/matrix cov)))
               unit-normal (normal 0 1)
               Z (delay (let [|Lcov| (reduce * (m/diagonal Lcov))]
@@ -268,7 +266,7 @@
                    (repeatedly (* n p) #(sample unit-normal))))
   (observe [this value]
            (- (* 0.5 (- n p 1) (Math/log (m/det value)))
-              (* 0.5 (m/trace (m/mul (m/inverse (m/matrix V)) value)))
+              (* 0.5 (m/trace (m/mmul (m/inverse (m/matrix V)) value)))
               @Z))
   multivariate-distribution
   (transform-sample [this samples] (transform-sample samples)))
@@ -286,32 +284,36 @@
 (defmacro defproc
   "defines random process"
   [name & args]
-  (let [[docstring parameters bindings & methods]
+  (let [[docstring parameters & args]
         (if (string? (first args))
           args
-          `(~(format "%s random process" name) ~@args))]
-    (let [record-name (symbol (format "%s-process" name))
-          variables (take-nth 2 bindings)
-          values (take-nth 2 (rest bindings))]
-      `(do
-         (declare ~name)
-         (defrecord ~record-name [~@parameters ~@variables]
-           Object
-           (toString [~'this]
-             (str (list '~(qualify name) ~@parameters)))
-           random-process
-           ~@methods)
-         (defn ~name ~docstring 
-           ;; Include parameters-only overload only if variables
-           ;; are not empty.
-           ~@(when (seq variables)
-               `((~parameters (~name ~@parameters ~@values))))
-           ([~@parameters ~@variables]
-            (~(symbol (format "->%s" record-name))
-                      ~@parameters ~@variables)))
-         (defmethod print-method ~record-name 
-           [~'o ~'m]
-           (print-simple (str ~'o) ~'m))))))
+          `(~(format "%s random process" name) ~@args))
+        [bindings & methods]
+        (if (vector? (first args))
+          args
+          `[[] ~@args])
+        record-name (symbol (format "%s-process" name))
+        variables (take-nth 2 bindings)
+        values (take-nth 2 (rest bindings))]
+    `(do
+       (declare ~name)
+       (defrecord ~record-name [~@parameters ~@variables]
+         Object
+         (toString [~'this]
+           (str (list '~(qualify name) ~@parameters)))
+         random-process
+         ~@methods)
+       (defn ~name ~docstring 
+         ;; Include parameters-only overload only if variables
+         ;; are not empty.
+         ~@(when (seq variables)
+             `((~parameters (~name ~@parameters ~@values))))
+         ([~@parameters ~@variables]
+          (~(symbol (format "->%s" record-name))
+                    ~@parameters ~@variables)))
+       (defmethod print-method ~record-name 
+         [~'o ~'m]
+         (print-simple (str ~'o) ~'m)))))
 
 ;; Random processes can accept and return functions,
 ;; and translations in and out of CPS form must be performed.
