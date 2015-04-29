@@ -206,8 +206,8 @@
                (* shape (log rate))))]
   (sample [this] (.nextDouble dist))
   (observe [this value]
-    ;;       shape  shape - 1
-    ;;     rate    x
+    ;;         shape  shape - 1
+    ;;     rate      x
     ;; log --------------------
     ;;      rate x
     ;;     e       Gamma(shape)
