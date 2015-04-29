@@ -221,7 +221,7 @@
   ;; The explicit type cast below is a fix to Clojure
   ;; constructor matching (clojure.lang.Reflector.isCongruent).
   ;; If the constructor is overloaded with the same number of
-  ;; arguments, clojure refuses to extend numeric types.
+  ;; arguments, Clojure refuses to extend numeric types.
   (Uniform (double min) (double max)))
 
 (defdist uniform-discrete
