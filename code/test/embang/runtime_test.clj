@@ -2,6 +2,11 @@
   (:require [clojure.test :refer [deftest testing is]])
   (:use embang.runtime))
 
+(defn ^:private trunc
+  "truncates floats to three digits after the decimal point;
+  used by tests for approximate comparison"
+  [x] (/ (Math/round (* x 1000.)) 1000.))
+
 (deftest test-categorical
   (testing "categorical"
     (let [dist (categorical '((x 1) (y 2)))]
@@ -9,6 +14,13 @@
           "observing value in support")
       (is (= (observe dist 'z) (Math/log 0.))
           "observing value not in support"))))
+
+(deftest test-gamma
+  (testing "gamma"
+    (let [dist (gamma 2 3)]
+      (is (= (observe dist 0.) (/ -1. 0.)))
+      (is (= (trunc (observe dist 1.))
+             (trunc -0.8027754226637804))))))
 
 (deftest test-uniform-discrete
   (testing "uniform-discrete"
@@ -24,13 +36,12 @@
 
 (deftest test-wishart
   (testing "wishart"
-    (let [dist (wishart 10 [[1 0.5] [0.5 2]])
-          round (fn [x] (/ (Math/round (* x 1000.)) 1000.))]
-      (is (= (round (observe (wishart 10 [[1 0.5] [0.5 2]])
+    (let [dist (wishart 10 [[1 0.5] [0.5 2]])]
+      (is (= (trunc (observe (wishart 10 [[1 0.5] [0.5 2]])
                              [[6.5390 5.7249] [5.7249 32.9458]]))
              -9.221)
           "2x2 log pdf")
-      (is (= (round (observe (wishart 5 [[4]]) [[2]]))
+      (is (= (trunc (observe (wishart 5 [[4]]) [[2]]))
              -4.694)
           "1x1 log pdf"))))
 
