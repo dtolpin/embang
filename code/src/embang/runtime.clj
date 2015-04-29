@@ -218,7 +218,7 @@
 (from-colt normal [mean sd] double)
 (from-colt poisson [lambda] int)
 (from-colt uniform-continuous [min max] double
-  ;; The explicit type cast below is a fix to clojure
+  ;; The explicit type cast below is a fix to Clojure
   ;; constructor matching (clojure.lang.Reflector.isCongruent).
   ;; If the constructor is overloaded with the same number of
   ;; arguments, clojure refuses to extend numeric types.
