@@ -14,7 +14,7 @@ leiningen project tree rooted at [`code`](https://bitbucket.org/dtolpin/embang/s
 
 ## License
 
-Copyright © 2014, 2015 Wood group
+Copyright © 2014, 2015 David Tolpin
 
 This file is part of __m!__, a probabilistic programming system.
 
