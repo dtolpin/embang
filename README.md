@@ -1,6 +1,6 @@
 # __m!__
 
-__m!__ (a successor of [Anglican](https://bitbucket.org/dtolpin/anglican/)
+__m!__ (a successor of [Anglican](https://bitbucket.org/dtolpin/anglican/))
 is a probabilistic programming language. An __m!__
 program is translated into Clojure through a Clojure
 macro, and then the code (converted into CPS) is executed
