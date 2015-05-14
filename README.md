@@ -1,7 +1,8 @@
-# Embedded Anglican
+# __m!__
 
-[We](https://bitbucket.org/dtolpin/embang/wiki/Contributors) have re-implemented Anglican as an embedded language. An
-Anglican program is translated into Clojure through a Clojure
+__m!__ (a successor of [Anglican](https://bitbucket.org/dtolpin/anglican/)
+is a probabilistic programming language. An __m!__
+program is translated into Clojure through a Clojure
 macro, and then the code (converted into CPS) is executed
 natively. The points where inference algorithms must intervene
 and affect sampling are exposed by stopping the execution and
