@@ -146,17 +146,17 @@
                entry (rand-nth (state ::trace))
                ;; Compute next state from the resampled choice.
                next-state (next-state state entry)
-               ;; Reconstruct the current state through transition back
-               ;; from the next state; the rdb will be different.
+               ;; Reconstruct the current state through
+               ;; transition back from the next state;
+               ;; the rdb will  be different.
                prev-state (prev-state state next-state entry)
-               ;; Apply Metropolis-Hastings acceptance rule to select
-               ;; either the new or the current state.
-               state (if (> (- (utility next-state) (utility prev-state))
-                            (Math/log (rand)))
-                       next-state
-                       state)]
-           ;; Include the selected state into the sequence of samples,
-           ;; setting the weight to the unit weight.
+               ;; Apply Metropolis-Hastings acceptance rule to
+               ;; select either the new or the current state.
+               state (if (> (- (utility next-state)
+                               (utility prev-state))
+                            (Math/log (rand))) next-state state)]
+           ;; Include the selected state into the sequence of
+           ;; samples, setting the weight to the unit weight.
            (cons (set-log-weight state 0.) (sample-seq state)))))]
 
     (let [state (:state (exec ::algorithm prog value initial-state))]
