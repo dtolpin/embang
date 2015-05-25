@@ -14,6 +14,11 @@
             [dtolpin/lein-gorilla "0.3.5-SNAPSHOT"]]
   :scm {:name "git"
         :url "https://bitbucket.org/dtolpin/embang"}
+  :pom-addition [:developers [:developer
+                              [:name "David Tolpin"]
+                              [:url "http://offtopia.net/"]
+                              [:email "dvd@offtopia.net"]
+                              [:timezone "+2"]]]
   :repl-options {:timeout 600000}
   :jvm-opts ["-Xmx1024m" "-Xss1024k"]
   :main ^:skip-aot embang.core
