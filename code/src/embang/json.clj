@@ -1,4 +1,5 @@
 (ns embang.json
+  "Iterator/JSON wrapper for doquery"
   (:require [clojure.data.json :as json])
   (:require [embang core state]))
 
