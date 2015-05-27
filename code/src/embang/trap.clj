@@ -44,7 +44,9 @@
                    repeatedly
                    every? not-any? some
                    every-pred some-fn
-                   comp juxt partial}
+                   comp juxt partial
+                   sort sort-by
+                   sorted-map-by sorted-set-by}
         ;; all functions in clojure.core and embang.runtime,
         ;; except excluded ones, are primitive
         runtime-namespaces '[clojure.core embang.runtime]]
