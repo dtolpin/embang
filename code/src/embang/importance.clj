@@ -17,4 +17,4 @@
             (lazy-seq
               (cons (:state (exec ::algorithm prog value initial-state))
                     (sample-seq))))]
-            (sample-seq)))
+    (sample-seq)))

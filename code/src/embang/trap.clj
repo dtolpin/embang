@@ -4,9 +4,9 @@
   (:use embang.ast
         embang.state))
 
-;;;; Trampoline-ready Anglican program
+;;;;; Trampoline-ready Anglican program
 
-;;; Architecture outline
+;;;; Architecture outline
 ;;
 ;; This module defines the transformation of an Anglican program
 ;; into a function in continuation-passing style. The function
@@ -16,11 +16,38 @@
 ;; either a thunk (an argumentless function) or a checkpoint ---
 ;; an object corresponding to either `sample', `observe', or to
 ;; returning the final result.
-
+;;
 ;; Functions are assumed to be in the CPS form. Exceptions
 ;; either come from certain namespaces or explicitly defined.
 
-;;; Identifying primitive procedures
+;;;; Public interface
+
+;;; Checkpoints
+;;
+;; Checkpoints corresponding to `sample' and `observe' include a
+;; continuation. This continuation must be called to continue
+;; the execution after the inference algorithm processed the
+;; checkpoint. The `result' checkpoint does not have a
+;; continuation. 
+
+(defrecord observe [id dist value cont state])
+(defrecord sample [id dist cont state])
+(defrecord result [state])
+
+;;; CPS Escapes
+
+;; Value and state access
+
+(defn value-cont "returns value" [v _] v)
+(defn state-cont "returns state" [_ s] s)
+
+;; Retrieval of the final result
+
+(defn result-cont [v s] (->result s))
+
+;;;; Transformations
+
+;;; Managing primitive procedures
 
 (def ^:dynamic *primitive-namespaces*
   "functions in these namespaces are primitive"
@@ -70,42 +97,6 @@
              (reduce disj *primitive-procedures* (flatten ~names))]
      ~@body))
 
-;;; Continuation management
-
-;; Value and state access
-
-(defn value-cont "returns value" [v _] v)
-(defn state-cont "returns state" [_ s] s)
-
-;; Checkpoints
-;;
-;; Checkpoints corresponding to `sample' and `observe' include a
-;; continuation. This continuation must be called to continue
-;; the execution after the inference algorithm processed the
-;; checkpoint. The `result' checkpoint does not have a
-;; continuation. 
-
-(defrecord observe [id dist value cont state])
-(defrecord sample [id dist cont state])
-(defrecord result [state])
-
-;; Retrieval of the final result
-
-(defn result-cont [v s] (->result s))
-
-;; When a continuation is called, it is wrapped in a thunk ---
-;; an argumentless function. This collapses the stack
-;; and ensures that recursion of any depth does not cause
-;; stack overflow. Thunks should be used in conjunction with
-;; Clojure `trampoline'.
-
-(defn continue
-  "returns a trampolined call to continuation"
-  [cont value state]
-  (with-meta
-    `(~'fn [] (~cont ~value ~state))
-    {::continuation true}))
-
 ;;; Expression predicates
 
 (defn declaration?
@@ -146,9 +137,8 @@
   (and (seq? expr) (= (first expr) 'mem)))
 
 ;;; Simple expressions
-
-;; Simple expressions are passed to continuations
-;; unmodified.
+;;
+;; Simple expressions are passed to continuations unmodified.
 
 (defn simple?
   "true if expr has no continuation"
@@ -180,7 +170,7 @@
     (not (primitive-procedure?  expr)) true))
 
 ;;; Opaque expresions
-
+;;
 ;; Some expressions are opaque, they are transformed
 ;; into CPS and then passed to continuations as arguments.
 
@@ -195,7 +185,7 @@
       (mem-form? expr)))
  
 ;; Simple expressions, primitive procedure wrappers,
-;; as well as fn and mem forms are opaque.
+;; as well as `fn' and `mem' forms are opaque.
 
 (declare primitive-procedure-cps fn-cps mem-cps)
 (defn opaque-cps
@@ -207,16 +197,60 @@
    (fn-form? expr) (fn-cps (rest expr))
    (mem-form? expr) (mem-cps (rest expr))))
 
-;;; General CPS transformation rules
+;;; Recursively called transformers
 
 (declare cps-of-expression
          cps-of-do
          cps-of-application)
 
+;;; Generating unique symbols
+
 (def ^:dynamic *gensym* 
   "customized gensym for code generation,
   bound to 'symbol' in tests"
   gensym)
+
+;;; Managing continuations
+
+;; A continuation can be any symbolic expression. Sometimes
+;; it has to be bound to a symbol to avoid variable capture
+;; or exponential code expansion.
+
+(defmacro ^:private defn-naming-cont
+  "defines a transformer while binding 
+  the continuation to a name"
+  [cps-of & args]
+  (let [[docstring [parms & body]]
+        (if (string? (first args)) 
+          [(first args) (rest args)]
+          [(format "CPS transformation macro '%s'" cps-of) args])]
+    (let [parms* (*gensym* "P")]
+      `(defn ~(with-meta cps-of {:doc docstring})
+         ;; Parameters can be structured. The sequence of
+         ;; all arguments is bound to ~parms*.
+         [& [~@parms :as ~parms*]]
+         (if (symbol? ~(last parms))
+           (do ~@body)
+           (let [~'cont* (*gensym* "C")]
+             `(~~''let [~~'cont* ~~(last parms)]
+                ;; If the continuation is not a symbol, ~parms* is
+                ;; used to re-pass arguments to the function along
+                ;; with the named continuation.
+                ~(apply ~cps-of
+                        (concat (butlast ~parms*) [~'cont*])))))))))
+
+;; When a continuation is called, it is wrapped in a thunk
+;; --- an argumentless function. This collapses the stack
+;; and ensures that recursion of any depth does not cause
+;; stack overflow. Thunks should be used in conjunction with
+;; Clojure `trampoline'.
+
+(defn continue
+  "returns a trampolined call to continuation"
+  [cont value state]
+  (with-meta
+    `(~'fn [] (~cont ~value ~state))
+    {::continuation true}))
 
 ;;; Literal data structures --- vectors, maps and sets.
 
@@ -290,10 +324,9 @@
                             `(set-mem ~'$state
                                       ~id ~mparms ~value)))))))))
 
-(defn cps-of-let
-  "transforms let to CPS;
-  body of let is trampolined
-  --- wrapped in a parameterless closure"
+(defn-naming-cont cps-of-let
+  "transforms let to CPS"
+  ;; The continuation is named to avoid variable capture.
   [[bindings & body] cont]
   (if (seq bindings)
     (let [[name value & bindings] bindings]
@@ -327,26 +360,10 @@
 
 ;;; Flow control.
 
-(defmacro defn-with-named-cont
-  "binds the continuation to a name to make the code
-  slightly easier to reason about"
-  [cps-of & args]
-  (let [[docstring [parms & body]]
-        (if (string? (first args)) 
-          [(first args) (rest args)]
-          [(format "CPS transformation macro '%s'" cps-of) args])]
-    (let [cont (last parms)]
-      `(defn ~(with-meta cps-of {:doc docstring})
-         ~parms
-         (if (symbol? ~cont)
-           (do ~@body)
-           (let [~'named-cont (*gensym* "C")]
-             `(~~''let [~~'named-cont ~~cont]
-                ~(~cps-of ~@(butlast parms) ~'named-cont))))))))
-
-(defn-with-named-cont
-  cps-of-if
+(defn-naming-cont cps-of-if
   "transforms if to CPS"
+  ;; The continuation is named to avoid exponential
+  ;; expansion of code.
   [args cont]
   (let [[cnd thn els & rst] (if-args args)]
     (if (opaque? cnd)
@@ -377,40 +394,41 @@
       (cps-of-if [cnd thn `(~'cond ~@clauses)] cont))
     (cps-of-expression nil cont)))
 
-(defn-with-named-cont
-  cps-of-case
+(defn-naming-cont cps-of-case
   "transforms case to CPS"
-  [args cont]
-  (let [[key & clauses] args]
-    (if (opaque? key)
-      `(~'case ~(opaque-cps key)
-         ~@(apply
-             concat
-             (loop [clauses clauses
-                    cps-clauses []]
-               (if (seq clauses)
-                 (if (rest clauses)
-                   ;; Normal clause.
-                   (let [[tag expr & clauses] clauses]
-                     (recur
-                       clauses
-                       (conj cps-clauses 
-                             [tag (cps-of-expression expr cont)])))
-                   ;; Default clause.
-                   (let [[expr] clauses]
-                     (conj cps-clauses
-                           [(cps-of-expression expr cont)])))
-                 cps-clauses))))
-      (cps-of-expression
-        key
-        (let [key (*gensym* "K")]
-          `(~'fn ~(*gensym* "case") [~key ~'$state]
-             ;; Call `cps-of-expression' to detect simple `case'.
-             ~(cps-of-expression `(~'case ~key ~@clauses) cont)))))))
+  ;; The continuation is named to avoid exponential
+  ;; expansion of code.
+  [[key & clauses] cont]
+  (if (opaque? key)
+    `(~'case ~(opaque-cps key)
+       ~@(apply
+           concat
+           (loop [clauses clauses
+                  cps-clauses []]
+             (if (seq clauses)
+               (if (rest clauses)
+                 ;; Normal clause.
+                 (let [[tag expr & clauses] clauses]
+                   (recur
+                     clauses
+                     (conj cps-clauses 
+                           [tag (cps-of-expression expr cont)])))
+                 ;; Default clause.
+                 (let [[expr] clauses]
+                   (conj cps-clauses
+                         [(cps-of-expression expr cont)])))
+               cps-clauses))))
+    (cps-of-expression
+      key
+      (let [key (*gensym* "K")]
+        `(~'fn ~(*gensym* "case") [~key ~'$state]
+           ;; Call `cps-of-expression' to detect simple `case'.
+           ~(cps-of-expression `(~'case ~key ~@clauses) cont))))))
 
-(defn-with-named-cont
-  cps-of-and
+(defn-naming-cont cps-of-and
   "transforms and to CPS"
+  ;; The continuation is named to avoid exponential
+  ;; expansion of code.
   [args cont]
   (if (seq args)
     (let [[cnd & args] args]
@@ -423,9 +441,10 @@
         (cps-of-expression cnd cont)))
     (cps-of-expression true cont)))
 
-(defn-with-named-cont
-  cps-of-or
+(defn-naming-cont cps-of-or
   "transforms or to CPS"
+  ;; The continuation is named to avoid exponential
+  ;; expansion of code.
   [args cont]
   (if (seq args)
     (let [[cnd & args] args]

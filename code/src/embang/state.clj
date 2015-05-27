@@ -41,7 +41,7 @@
 (defn get-predicts
   "returns collected predicts as an array map"
   [state]
-  (reduce conj (array-map) (reverse (state ::predicts))))
+  (into (array-map) (reverse (state ::predicts))))
 
 (defn clear-predicts
   "clears predicts"
