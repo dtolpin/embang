@@ -47,14 +47,45 @@
 ;; is log-sum-exp.
 
 (defn log-sum-exp
-  "computes (log (+ (exp x) (exp y))) safely"
-  [log-x log-y]
-  (let [log-max (max log-x log-y)]
+  "computes (log (+ (exp x_1) (exp x_2) ...)) safely"
+  [& logs]
+  (let [log-max (reduce max logs)]
     (if (< (/ -1. 0.) log-max)
       (+ log-max
-         (Math/log (+ (Math/exp (- log-x log-max))
-                      (Math/exp (- log-y log-max)))))
+         (Math/log 
+           (reduce + (map #(Math/exp (- % log-max)) logs))))
       log-max)))
+
+;; Distribution combinators
+
+(defn product-distribution
+  "product distribution;
+  receives vector of distributions"
+  [ds]
+  (reify 
+    distribution 
+    (sample [this] (mapv sample ds))
+    (observe [this vs]
+      (reduce (fn [logpdf [d v]]
+                (+ logpdf (observe d v)))
+              0. (map vector ds vs)))))
+
+(declare categorical)
+
+(defn mixture-distribution
+  "mixture distribution;
+  receives vector of tuples [distribution weight]"
+  [dws]
+  (let [mixture (categorical dws)]
+    (reify
+      distribution
+      (sample [this] 
+        (sample (sample mixture)))
+      (observe [this value]
+        (apply log-sum-exp
+               (map (fn [[d _]]
+                      (+ (observe mixture d) (observe d value)))
+                    dws))))))
 
 ;; Distribution types, in alphabetical order.
 
