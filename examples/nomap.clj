@@ -1,8 +1,15 @@
-(ns nomap
-  (:use [embang emit runtime]))
+;; Automatically converted from old syntax;
+;; comments were lost during conversion.
 
-(defanglican nomap
- [assume foo (lambda ()
-               (+ (sample (normal 1 0.1))
-                  (if (sample (flip 0.5)) (foo) 0.)))]
- [predict (foo)])
+(ns nomap (:use [embang emit runtime]))
+
+(defquery
+ nomap
+ (let
+  [foo
+   (fn
+    foo
+    []
+    (+ (sample (normal 1 0.1)) (if (sample (flip 0.5)) (foo) 0.0)))]
+  (predict '(foo) (foo))))
+

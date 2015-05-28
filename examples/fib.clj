@@ -1,3 +1,6 @@
+;; Automatically converted from old syntax;
+;; comments were lost during conversion.
+
 (ns fib
   (:use [embang runtime emit]))
 

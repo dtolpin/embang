@@ -1,3 +1,6 @@
+;; Automatically converted from old syntax;
+;; comments were lost during conversion.
+
 (ns aircraft (:use [embang emit runtime]))
 (defquery
  aircraft

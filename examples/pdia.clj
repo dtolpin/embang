@@ -1,8 +1,11 @@
+;; Automatically converted from old syntax;
+;; comments were lost during conversion.
+
 (ns pdia
   (:require [clojure.string :as str :refer [join]]
             [clojure.java.io :as io])
   (:use [embang emit runtime]
-        [anglib crp]))
+        crp))
 
 (defn read-data
   "reads text resource as data"

@@ -1,3 +1,6 @@
+;; Automatically converted from old syntax;
+;; comments were lost during conversion.
+
 (ns lda
   (:use [embang emit runtime]
         psychreview-data))

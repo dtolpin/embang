@@ -1,3 +1,6 @@
+;; Automatically converted from old syntax;
+;; comments were lost during conversion.
+
 (ns particle-filter
   (:use [embang runtime emit]))
 

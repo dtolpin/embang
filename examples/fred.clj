@@ -1,60 +1,68 @@
-(ns fred
-  (use (embang runtime emit)))
+;; Automatically converted from old syntax;
+;; comments were lost during conversion.
 
-;;; Is Fred guilty? Expanded and then counting version.
+(ns fred (use (embang runtime emit)))
 
-;; A note on categorical distribution --- weights do not
-;; have to sum to 1., they are normalized. You are welcome
-;; to play with probabilities by changing just one of the
-;; weights.
+(defm is-fred? [person] (= person 0))
 
-;; Fred is person number 0
-(defun is-fred? (person) (= person 0))
+(defm
+ is-guilty-fred?
+ [guilty]
+ (let
+  [sex
+   (mem
+    (fn
+     sex
+     [person]
+     (if
+      (is-fred? person)
+      'male
+      (sample (categorical '((male 0.49) (female 0.51)))))))]
+  (let
+   [size
+    (mem
+     (fn
+      size
+      [person]
+      (if
+       (is-fred? person)
+       'large
+       (let
+        [sex (sex person)]
+        (sample
+         (cond
+          (= sex 'male)
+          (categorical '((small 0.2) (medium 0.3) (large 0.5)))
+          (= sex 'female)
+          (categorical '((small 0.4) (medium 0.4) (large 0.2)))))))))]
+   (let
+    [hair
+     (mem
+      (fn
+       hair
+       [person]
+       (if
+        (is-fred? person)
+        'purple
+        (sample
+         (categorical '((black 0.7) (blond 0.28) (purple 0.02)))))))]
+    (observe
+     (categorical '((small 0.1) (medium 0.2) (large 0.7)))
+     (size guilty))
+    (observe
+     (categorical '((black 0.15) (purple 0.8) (blond 0.05)))
+     (hair guilty))
+    (predict '(is-fred? guilty) (is-fred? guilty))))))
 
-;; Helper function --- is the guilty person Fred?
-(defun is-guilty-fred? (guilty)
-  (assume sex (mem (lambda (person) 
-                     (if (is-fred? person) 'male
-                       (sample (categorical '((male 0.49)
-                                              (female 0.51))))))))
-  (assume size (mem
-                 (lambda (person)
-                   (if (is-fred? person) 'large
-                     (let ((sex (sex person)))
-                       (sample
-                         ;; Males are large than females.
-                         (cond ((= sex 'male)
-                                (categorical '((small 0.2)
-                                               (medium 0.3)
-                                               (large 0.5))))
-                               ((= sex 'female)
-                                (categorical '((small 0.4)
-                                               (medium 0.4)
-                                               (large 0.2)))))))))))
+(defquery
+ fred
+ (let
+  [guilty (sample (uniform-discrete 0 100))]
+  (is-guilty-fred? guilty)))
 
-  (assume hair (mem (lambda (person)
-                      (if (is-fred? person) 'purple
-                        (sample
-                          ;; Only two people with purple hair.
-                          (categorical '((black 0.7)
-                                         (blond 0.28)
-                                         (purple 0.02))))))))
+(defquery
+ counting
+ (let
+  [guilty (sample (discrete '(0.01 0.99)))]
+  (is-guilty-fred? guilty)))
 
-  ;; Most witnesses say the thief was large.
-  (observe (categorical '((small 0.1) (medium 0.2) (large 0.7)))
-           (size guilty))
-  ;; Most witnesses say the thief had purple hair.
-  (observe (categorical '((black 0.15) (purple 0.8) (blond 0.05)))
-           (hair guilty))
-
-  (predict (is-fred? guilty)))
-
-;; Expanded version
-(defanglican fred
-  (assume guilty (sample (uniform-discrete 0 100)))
-  (is-guilty-fred? guilty))
-
-;; Counting version
-(defanglican counting
-  (assume guilty (sample (discrete '(0.01 0.99))))
-  (is-guilty-fred? guilty))
