@@ -25,7 +25,7 @@
      :creds :gpg}]]
 
   ;; Dependencies
-  :dependencies [[org.clojure/clojure "1.6.0"]
+  :dependencies [[org.clojure/clojure "1.7.0"]
                  [org.clojure/tools.cli "0.3.1"]
                  [org.clojure/data.json "0.2.6"]
                  [com.taoensso/timbre "3.4.0"]
