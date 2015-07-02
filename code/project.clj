@@ -38,7 +38,6 @@
   ;; Run options
   :repl-options {:init-ns embang.core
                  :timeout 600000}
-  :jvm-opts ["-Xmx1024m" "-Xss1024k"]
   :main ^:skip-aot embang.core
   :target-path "target/%s"
   :profiles {:repl {:resource-paths ["../examples"]}
