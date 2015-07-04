@@ -81,9 +81,10 @@
         (recur (trampoline next))
         next))))
 
-;;; Warmup --- runnning until the first checkpoint
+;;; Pre- and postprocessing
 
-;; All particles will run the same way.
+
+;; Warmup --- runnning until the first checkpoint.
 
 (defn warmup
   "runs until the first checkpoint and returns
@@ -96,6 +97,14 @@
                   ;; Predict sequence in state overrides
                   ;; predict sequence in initial-state.
                   (fn [state] (merge initial-state state)))))))
+
+;; Strip-down --- removing algorithmic-specific entries
+;; from the state.
+
+(defn stripdown
+  "removes algorithm-specific entries from the state"
+  [state]
+  (select-keys state (remove namespace (keys initial-state))))
 
 ;;; Random functions for inference algorithms
 

@@ -5,7 +5,8 @@
   (:require [clojure.edn :refer [read-string]]
             [clojure.string :as str]
             [clojure.tools.cli :as cli])
-  (:use [embang.inference :only [warmup infer print-predicts]])
+  (:use [embang.inference 
+         :only [infer warmup stripdown print-predicts]])
   (:use [embang.results :only [redir freqs meansd diff]]))
 
 ;;; Auto-loading of algorithms and programs
@@ -227,12 +228,20 @@ Options:
     ;; Use the auto-loading machinery in embang.core to load
     ;; the inference algorithm on demand.
     (load-algorithm algorithm)
+
     (let [options* (apply hash-map options)]
       ;; Optionally, warm up the query by pre-evaluating
       ;; the determenistic prefix.
       (let [[query value] (if (:warmup options* true)
                             [(warmup query value) nil]
-                            [query value])]
-        ;; Finally, call the inference to create
-        ;; a lazy sequence of states.
-        (apply infer algorithm query value options)))))
+                            [query value])
+
+            ;; Finally, call the inference to create
+            ;; a lazy sequence of states.
+            states (apply infer algorithm query value options)]
+
+        ;; Optionally, strip down the output state of
+        ;; algorithm-specific entries.
+        (if (:stripdown options* true)
+          (map stripdown states)
+          states)))))
